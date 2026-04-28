@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 
-function Sidebar({ onLogout, onTabChange, initialTab = 'chats', className = '' }) {
-  const [activeTab, setActiveTab] = useState(initialTab);
-
+function Sidebar({ onLogout, onTabChange, activeTab = 'chats', className = '' }) {
   const handleTabChange = (tab) => {
-    setActiveTab(tab);
     if (onTabChange) onTabChange(tab);
   };
 

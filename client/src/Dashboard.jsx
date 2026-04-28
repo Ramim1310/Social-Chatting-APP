@@ -19,7 +19,29 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   const [username, setUsername] = useState(user?.name || "Anonymous");
   const [room, setRoom] = useState(localStorage.getItem('activeRoom') || "");
   const [chatName, setChatName] = useState(localStorage.getItem('activeChatName') || "");
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const getTabFromHash = () => {
+    const hash = window.location.hash.replace(/^#\//, '');
+    return ['chats', 'community', 'settings', 'search', 'requests'].includes(hash) ? hash : null;
+  };
+
+  const [activeTab, setActiveTab] = useState(() => getTabFromHash() || initialTab);
+
+  useEffect(() => {
+    if (window.location.hash !== `#/${activeTab}`) {
+      window.location.hash = `#/${activeTab}`;
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hashTab = getTabFromHash();
+      if (hashTab && hashTab !== activeTab) {
+        setActiveTab(hashTab);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeTab]);
 
   const [message, setMessage] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -244,7 +266,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
         </div>
       ) : activeTab === 'settings' ? (
         <div className="w-full h-full overflow-hidden flex">
-          <Sidebar onLogout={onLogout} onTabChange={setActiveTab} initialTab={activeTab} />
+          <Sidebar onLogout={onLogout} onTabChange={setActiveTab} activeTab={activeTab} />
           <Settings user={user} onUserUpdate={(updatedUser) => { refreshUser(updatedUser); }} />
         </div>
       ) : (
@@ -253,7 +275,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       <Sidebar 
           onLogout={onLogout}
           onTabChange={setActiveTab}
-          initialTab={initialTab}
+          activeTab={activeTab}
           className="zen-hide"
       />
       

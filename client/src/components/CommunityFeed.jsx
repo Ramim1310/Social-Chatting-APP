@@ -398,7 +398,7 @@ export default function CommunityFeed({ user, onBack }) {
                     </div>
 
                     {/* Title & Content */}
-                    <h2 className="text-lg font-bold text-gray-900 mb-2 leading-snug" style={{ fontFamily: "'Manrope', sans-serif" }}>{post.title}</h2>
+                    <h2 className="text-xl font-black text-gray-900 mb-2 leading-snug" style={{ fontFamily: "'Manrope', sans-serif" }}>{post.title}</h2>
                     <p className="text-sm text-gray-500 leading-relaxed line-clamp-3 mb-4">{post.content}</p>
 
                     {/* Reactions Footer */}
@@ -421,7 +421,7 @@ export default function CommunityFeed({ user, onBack }) {
 
                     {/* Comments (System Agent / AI insight comments hidden) */}
                     {post.comments?.filter(c => c.author?.name !== 'System Agent').length > 0 && (
-                      <div className="space-y-3 pt-3 border-t border-gray-50">
+                      <div className="bg-gray-50/50 border-t border-gray-100 p-4 mt-3 rounded-xl space-y-3">
                         {post.comments
                           .filter(c => c.author?.name !== 'System Agent')
                           .map(comment => {

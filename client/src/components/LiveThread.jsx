@@ -16,17 +16,21 @@ const LiveThread = () => {
         const fetchNews = async () => {
             setLoading(true);
             try {
-                const results = {};
-                for (const c of communities) {
-                    const res = await api.get(`/api/news/${c}`);
-                    results[c] = res.data.map(article => ({
-                        id: article.id,
-                        content: article.title,
-                        timestamp: article.pubDate,
-                        link: article.link,
-                        source: article.source || 'Coverage'
-                    }));
-                }
+                const results = { gaming: [], sports: [], anime: [], movie: [] };
+                await Promise.all(communities.map(async (c) => {
+                    try {
+                        const res = await api.get(`/api/news/${c}`);
+                        results[c] = res.data.map(article => ({
+                            id: article.id,
+                            content: article.title,
+                            timestamp: article.pubDate,
+                            link: article.link,
+                            source: article.source || 'Coverage'
+                        }));
+                    } catch (err) {
+                        console.error(`Failed to fetch ${c}`, err);
+                    }
+                }));
                 if (isMounted) setUpdates(results);
             } catch (e) {
                 console.error("Failed to fetch RSS news", e);

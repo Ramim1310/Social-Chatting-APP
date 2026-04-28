@@ -40,6 +40,7 @@ export default function Settings({ user, onUserUpdate }) {
   const fileInputRef = useRef(null);
 
   // Profile state
+  const [activeTab, setActiveTab] = useState('profile');
   const [name, setName] = useState(user?.name || '');
   const [imagePreview, setImagePreview] = useState(user?.image || null);
   const [imageBase64, setImageBase64] = useState(null);
@@ -124,8 +125,25 @@ export default function Settings({ user, onUserUpdate }) {
 
           {/* ── LEFT ────────────────────────────────────────────────────── */}
           <div className="space-y-6">
+            
+            <div className="flex items-center gap-2 border-b border-[var(--color-outline-variant)]/20 pb-4 mb-2 overflow-x-auto custom-scrollbar">
+              {[
+                { id: 'profile', label: 'Profile' },
+                { id: 'visual', label: 'Visual Identity' },
+                { id: 'security', label: 'Account Security' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-[var(--color-primary)] text-white shadow-md' : 'text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-high)]'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
             {/* Profile Identity */}
+            {activeTab === 'profile' && (
             <SettingsCard icon="person" iconBg="bg-gradient-to-br from-[#4a40e0] to-[#9795ff]" title="Profile Identity">
               <div className="flex items-center gap-6">
                 <div className="relative shrink-0">
@@ -168,8 +186,10 @@ export default function Settings({ user, onUserUpdate }) {
                 )}
               </div>
             </SettingsCard>
+            )}
 
             {/* Visual Identity */}
+            {activeTab === 'visual' && (
             <SettingsCard icon="palette" iconBg="bg-gradient-to-br from-teal-400 to-indigo-500" title="Visual Identity">
               {/* Theme Mode */}
               <div>
@@ -204,8 +224,10 @@ export default function Settings({ user, onUserUpdate }) {
                 </div>
               )}
             </SettingsCard>
+            )}
 
             {/* Account Security */}
+            {activeTab === 'security' && (
             <SettingsCard icon="manage_accounts" iconBg="bg-gradient-to-br from-slate-500 to-slate-700" title="Account Security">
               <div>
                 <label className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)] block mb-1.5">Email Address</label>
@@ -246,6 +268,7 @@ export default function Settings({ user, onUserUpdate }) {
                 <button className="px-4 py-2 rounded-xl border border-[var(--color-outline-variant)]/20 text-xs font-bold text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container-high)] transition-colors">Enable 2FA</button>
               </div>
             </SettingsCard>
+            )}
           </div>
 
           {/* ── RIGHT ───────────────────────────────────────────────────── */}

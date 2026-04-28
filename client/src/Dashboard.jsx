@@ -13,6 +13,56 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './api';
 import toast, { Toaster } from 'react-hot-toast';
 import { useTheme } from './ThemeContext';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
+// ── Markdown renderer with custom styled components ──────────────────────────
+const MarkdownContent = ({ content, isMe }) => (
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      p: ({ children }) => <p className="leading-relaxed whitespace-pre-wrap break-words text-sm">{children}</p>,
+      strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+      em: ({ children }) => <em className="italic">{children}</em>,
+      blockquote: ({ children }) => (
+        <blockquote className={`border-l-2 pl-3 my-1 italic text-sm ${
+          isMe ? 'border-purple-300 text-purple-100' : 'border-gray-300 text-gray-500'
+        }`}>{children}</blockquote>
+      ),
+      code: ({ inline, children }) =>
+        inline ? (
+          <code className="font-mono text-xs bg-gray-800 text-gray-100 px-1.5 py-0.5 rounded">{children}</code>
+        ) : (
+          <pre className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded-xl my-1 overflow-x-auto whitespace-pre-wrap">
+            <code>{children}</code>
+          </pre>
+        ),
+      a: ({ href, children }) => (
+        <a href={href} target="_blank" rel="noopener noreferrer"
+          className={`underline underline-offset-2 ${
+            isMe ? 'text-purple-200 hover:text-white' : 'text-purple-600 hover:text-purple-800'
+          }`}>{children}</a>
+      ),
+    }}
+  >
+    {content}
+  </ReactMarkdown>
+);
+
+// ── Hover action button ───────────────────────────────────────────────────────
+const ActionBtn = ({ icon, label, onClick, danger = false }) => (
+  <button
+    onClick={onClick}
+    title={label}
+    className={`p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 font-semibold ${
+      danger
+        ? 'text-red-500 hover:bg-red-50'
+        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+    }`}
+  >
+    <span className="material-symbols-outlined text-[16px]">{icon}</span>
+  </button>
+);
 
 function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   const { playSound, showNotification } = useTheme();
@@ -49,7 +99,33 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   const [typingUsers, setTypingUsers] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
   const [showDetailPane, setShowDetailPane] = useState(false);
-  const messagesEndRef = React.useRef(null); 
+  const messagesEndRef = React.useRef(null);
+
+  // ── Feature 1 & 2: Message actions + threaded replies ────────────────────
+  // replyingTo: the message object the user is replying to (null = no active reply)
+  const [replyingTo, setReplyingTo] = useState(null);
+  // editingId: id of the message currently being edited (null = none)
+  // TODO (backend): wire up socket/API event to persist edits
+  const [editingId, setEditingId] = useState(null);
+
+  const handleReply = (msg) => setReplyingTo(msg);
+  const cancelReply = () => setReplyingTo(null);
+
+  const handleDeleteMessage = (msgId) => {
+    // TODO (backend): call DELETE /api/messages/:id and emit socket event
+    // socket.emit('delete_message', { room, messageId: msgId });
+    queryClient.setQueryData(['messages', room], (old) =>
+      old ? old.filter(m => m.id !== msgId && m.tempId !== msgId) : old
+    );
+    toast.success('Message removed');
+  };
+
+  const handleEditMessage = (msg) => {
+    // TODO (backend): after edit, call PATCH /api/messages/:id
+    setEditingId(msg.id);
+    setMessage(msg.content); // pre-fill input with current content
+    toast('Edit mode — update text and press Enter', { icon: '✏️' });
+  };
 
   const queryClient = useQueryClient();
 
@@ -137,12 +213,16 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
         time: new Date(Date.now()).getHours() + ":" + new Date(Date.now()).getMinutes(),
         isOptimistic: true,
         status: 'sending',
-        tempId: tempId
+        tempId: tempId,
+        // Feature 2: include reply context so receiving end can render the quoted block
+        // TODO (backend): persist replyTo on the Message model and return it from /api/messages
+        replyTo: replyingTo ? { id: replyingTo.id, author: replyingTo.sender?.name || replyingTo.author, content: replyingTo.content } : undefined,
       };
 
       mutation.mutate(messageData);
-      
       setMessage("");
+      setReplyingTo(null); // clear reply banner after send
+      setEditingId(null);
       handleStopTyping();
     }
   };
@@ -500,16 +580,20 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                      {messageList.map((messageContent, index) => {
                        const isMe = (messageContent.sender?.name === username) || (messageContent.author === username);
                        const currentSender = messageContent.sender?.name || messageContent.author;
+                       // Feature 3: check if the sender is currently online
+                       const senderIsOnline = activeUsers.some(u => u.name === currentSender);
                        
                        return (
+                           // Feature 1: group class enables hover-based action menu visibility
                            <motion.div
                                key={messageContent.id || messageContent.tempId || index}
                                initial={{ opacity: 0, y: 10 }}
                                animate={{ opacity: 1, y: 0 }}
-                               className={`flex gap-4 max-w-2xl ${isMe ? 'ml-auto flex-row-reverse' : ''}`}
+                               className={`group relative flex gap-4 max-w-2xl ${isMe ? 'ml-auto flex-row-reverse' : ''}`}
                            >
+                               {/* ── Avatar with online status dot (Feature 3) ── */}
                                {!isMe ? (
-                                   <div className="shrink-0">
+                                   <div className="shrink-0 relative">
                                        {messageContent.sender?.image || messageContent.image ? (
                                            <img src={messageContent.sender?.image || messageContent.image} className="w-8 h-8 rounded-lg mt-auto object-cover" />
                                        ) : (
@@ -517,19 +601,68 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                                                {currentSender?.charAt(0).toUpperCase()}
                                            </div>
                                        )}
+                                       {/* Online status dot */}
+                                       <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                                         senderIsOnline ? 'bg-green-500' : 'bg-gray-400'
+                                       }`} />
                                    </div>
                                ) : (
                                    <div className="shrink-0 flex items-end">
                                       <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-fixed)] mt-auto flex items-center justify-center text-[10px] font-black text-[var(--color-on-primary-fixed-variant)]">ME</div>
                                    </div>
                                )}
-                               <div className={`space-y-2 ${isMe ? 'flex flex-col items-end' : ''}`}>
+
+                               {/* ── Message body ── */}
+                               <div className={`space-y-1.5 ${isMe ? 'flex flex-col items-end' : ''}`}>
                                    {!isMe && !room.includes('-') && <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-1 font-bold">{currentSender}</span>}
-                                   
-                                   <div className={`${isMe ? 'bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] shadow-[0_8px_20px_rgba(74,64,224,0.15)] asymmetric-outgoing' : 'bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] shadow-[0_4px_12px_rgba(39,46,66,0.03)] border border-[var(--color-outline-variant)]/5 asymmetric-incoming'} p-6 rounded-2xl`}>
-                                        <p className="leading-relaxed font-body whitespace-pre-line break-words max-w-full text-sm">{messageContent.content}</p>
+
+                                   {/* Feature 2: quoted reply preview above the bubble */}
+                                   {messageContent.replyTo && (
+                                     <div className={`flex items-start gap-1.5 px-3 py-1.5 rounded-xl max-w-xs ${
+                                       isMe ? 'bg-purple-800/40 border-l-2 border-purple-300' : 'bg-gray-100 border-l-2 border-gray-300'
+                                     }`}>
+                                       <span className="material-symbols-outlined text-[13px] shrink-0 mt-0.5 text-gray-400">reply</span>
+                                       <div className="min-w-0">
+                                         <p className={`text-[10px] font-bold mb-0.5 ${ isMe ? 'text-purple-200' : 'text-gray-500' }`}>
+                                           {messageContent.replyTo.author}
+                                         </p>
+                                         <p className={`text-xs truncate ${ isMe ? 'text-purple-200/70' : 'text-gray-500' }`}>
+                                           {messageContent.replyTo.content}
+                                         </p>
+                                       </div>
+                                     </div>
+                                   )}
+
+                                   {/* ── Bubble + hover actions wrapper ── */}
+                                   <div className="relative flex items-center gap-2">
+
+                                     {/* Feature 1: Action menu — appears on hover, left of bubble for sender, right for receiver */}
+                                     {isMe && (
+                                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                                         <ActionBtn icon="reply" label="Reply" onClick={() => handleReply(messageContent)} />
+                                         <ActionBtn icon="edit" label="Edit" onClick={() => handleEditMessage(messageContent)} />
+                                         <ActionBtn icon="delete" label="Delete" onClick={() => handleDeleteMessage(messageContent.id || messageContent.tempId)} danger />
+                                       </div>
+                                     )}
+
+                                     <div className={`${
+                                       isMe
+                                         ? 'bg-purple-600 text-white border-0 asymmetric-outgoing'
+                                         : 'bg-gray-50 text-gray-900 shadow-sm border border-gray-200 asymmetric-incoming'
+                                     } px-5 py-3.5 rounded-2xl max-w-sm`}>
+                                       {/* Feature 4: Markdown rendering */}
+                                       <MarkdownContent content={messageContent.content} isMe={isMe} />
+                                     </div>
+
+                                     {/* Action menu for receiver messages (right side) */}
+                                     {!isMe && (
+                                       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                                         <ActionBtn icon="reply" label="Reply" onClick={() => handleReply(messageContent)} />
+                                       </div>
+                                     )}
                                    </div>
 
+                                   {/* Timestamp + delivery ticks */}
                                    <div className={`flex items-center gap-1.5 ${isMe ? 'mr-0 justify-end' : 'ml-0'}`}>
                                         <span className="text-[10px] text-[var(--color-outline)] px-1">
                                              {messageContent.timestamp ? new Date(messageContent.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : messageContent.time}
@@ -605,7 +738,30 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                  </div>
 
                  {/* Message Input Area (Floating Footer) */}
-                 <footer className="p-6 md:p-8 shrink-0 bg-[var(--color-surface-container-low)]/50 custom-glass border-t border-[var(--color-outline-variant)]/10 z-20">
+                 <footer className="shrink-0 bg-[var(--color-surface-container-low)]/50 custom-glass border-t border-[var(--color-outline-variant)]/10 z-20">
+
+                   {/* Feature 2: Reply banner — visible when replyingTo is set */}
+                   <AnimatePresence>
+                   {replyingTo && (
+                     <motion.div
+                       initial={{ opacity: 0, y: 6 }}
+                       animate={{ opacity: 1, y: 0 }}
+                       exit={{ opacity: 0, y: 6 }}
+                       className="mx-6 md:mx-8 mt-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-purple-50 border border-purple-200"
+                     >
+                       <div className="flex items-center gap-2 min-w-0">
+                         <span className="material-symbols-outlined text-purple-500 text-[16px] shrink-0">reply</span>
+                         <span className="text-xs font-bold text-purple-700 shrink-0">Replying to {replyingTo.sender?.name || replyingTo.author}</span>
+                         <span className="text-xs text-purple-500 truncate">{replyingTo.content}</span>
+                       </div>
+                       <button onClick={cancelReply} className="shrink-0 text-purple-400 hover:text-purple-700 transition-colors">
+                         <span className="material-symbols-outlined text-[18px]">close</span>
+                       </button>
+                     </motion.div>
+                   )}
+                   </AnimatePresence>
+
+                   <div className="p-4 md:p-6">
                      <div className="max-w-5xl mx-auto flex items-center gap-4">
                          <div className="flex items-center gap-1">
                              <button className="p-3 rounded-2xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-all">
@@ -618,7 +774,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                          <div className="flex-1 relative">
                              <input 
                                  id="message-input"
-                                 className="w-full h-14 pl-6 pr-14 rounded-2xl bg-[var(--color-surface-container-lowest)] border-none ring-1 ring-[var(--color-outline-variant)]/20 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none transition-all font-body text-[var(--color-on-surface)] placeholder:text-[var(--color-outline-variant)]" 
+                                 className="w-full h-12 pl-6 pr-14 rounded-2xl bg-white border border-gray-200 hover:border-purple-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-body text-[var(--color-on-surface)] placeholder:text-[var(--color-outline-variant)]" 
                                  placeholder="Type a thoughtful response..." 
                                  type="text"
                                  value={message}
@@ -633,12 +789,12 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                              id="send-message-btn"
                              onClick={sendMessage}
                              disabled={!message.trim()}
-                             className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] flex items-center justify-center shadow-[0_12px_24px_rgba(74,64,224,0.25)] hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+                             className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] flex items-center justify-center shadow-[0_12px_24px_rgba(74,64,224,0.25)] hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
                          >
                              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
                          </button>
                      </div>
-                     <div className="max-w-5xl mx-auto mt-4 px-1 flex items-center gap-2">
+                     <div className="max-w-5xl mx-auto mt-3 px-1 flex items-center gap-2">
                          <div className="flex -space-x-2">
                              {user?.image ? (
                                 <img src={user.image} className="w-5 h-5 rounded-full ring-2 ring-[var(--color-surface)] bg-[var(--color-surface-variant)] object-cover" />
@@ -649,6 +805,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                          </div>
                          <p className="text-[10px] font-body text-[var(--color-on-surface-variant)]">Active in <span className="font-bold">{room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}</span></p>
                      </div>
+                   </div>
                  </footer>
                </div>
                            {/* Right Detail Pane — slide in from right on ⋮ click */}
@@ -725,6 +882,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
              )}
               </AnimatePresence>
          </section>
+         {activeTab !== 'community' && <LiveThread />}
       </main>
       </>
       )}

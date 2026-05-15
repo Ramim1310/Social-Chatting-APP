@@ -27,6 +27,10 @@ model User {
   joinedCommunities  Community[] @relation("CommunityMembers")
   posts              Post[]      @relation("UserPosts")
   comments           Threaded_Comment[] @relation("UserComments")
+  polls              Poll[]      @relation("UserPolls")
+  votes              PollVote[]  @relation("UserVotes")
+  createdGroups      Group[]     @relation("GroupCreator")
+  joinedGroups       Group[]     @relation("GroupMembers")
 }
 
 model Community {
@@ -41,6 +45,19 @@ model Community {
   
   members     User[]   @relation("CommunityMembers")
   posts       Post[]
+}
+
+model Group {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  creatorId   Int
+  creator     User     @relation("GroupCreator", fields: [creatorId], references: [id])
+  
+  members     User[]   @relation("GroupMembers")
 }
 
 model Post {
@@ -118,4 +135,47 @@ model NewsArticle {
   source    String?
   category  String
   createdAt DateTime @default(now())
+}
+
+model DecisionNode {
+  id        String   @id @default(uuid())
+  roomId    String   @unique
+  state     Bytes?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── Feature: In-Chat Polls ────────────────────────────────────────────────────
+model Poll {
+  id        Int          @id @default(autoincrement())
+  question  String
+  room      String
+  createdBy Int
+  creator   User         @relation("UserPolls", fields: [createdBy], references: [id])
+  options   PollOption[]
+  closesAt  DateTime?
+  isClosed  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  @@index([room])
+}
+
+model PollOption {
+  id     Int        @id @default(autoincrement())
+  text   String
+  pollId Int
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+}
+
+model PollVote {
+  id       Int        @id @default(autoincrement())
+  optionId Int
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  pollId   Int
+  userId   Int
+  user     User       @relation("UserVotes", fields: [userId], references: [id])
+  castAt   DateTime   @default(now())
+
+  @@unique([pollId, userId]) // DB-enforced: one vote per user per poll
 }

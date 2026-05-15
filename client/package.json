@@ -11,14 +11,23 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.19",
+    "@tiptap/pm": "^3.23.4",
+    "@tiptap/react": "^3.23.4",
+    "@tiptap/starter-kit": "^3.23.4",
+    "@tiptap/y-tiptap": "^3.0.3",
     "axios": "^1.13.2",
     "framer-motion": "^12.26.2",
+    "lib0": "^0.2.117",
+    "lucide-react": "^1.16.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "y-protocols": "^1.0.7",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

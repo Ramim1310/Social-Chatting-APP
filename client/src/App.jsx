@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import Dashboard from './Dashboard';
-import Login from './components/Login';
-import Signup from './components/Signup';
-import WelcomeScreen from './components/WelcomeScreen';
+import Dashboard from './layouts/Dashboard';
+import Login from './features/auth/Login';
+import Signup from './features/auth/Signup';
+import WelcomeScreen from './components/common/WelcomeScreen';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ThemeProvider } from './ThemeContext';
-import api from './api';
+import { ThemeProvider } from './context/ThemeContext';
+import api from './services/api';
 
 function App() {
   const [user, setUser] = useState(null);

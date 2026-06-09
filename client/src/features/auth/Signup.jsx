@@ -32,7 +32,7 @@ function Signup({ onLogin, onSwitchToLogin }) {
             <label className="text-[10px] text-[var(--color-on-surface-variant)] uppercase tracking-widest font-bold mb-1 title-font">Username</label>
             <input
               type="text"
-              placeholder="Choose a username"
+              placeholder="What should we call you?"
               className="w-full p-3 bg-[var(--color-surface-variant)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] ghost-border outline-none text-[var(--color-on-surface)] placeholder-[var(--color-on-surface-variant)] transition-all"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -43,7 +43,7 @@ function Signup({ onLogin, onSwitchToLogin }) {
             <label className="text-[10px] text-[var(--color-on-surface-variant)] uppercase tracking-widest font-bold mb-1 title-font">Email</label>
             <input
               type="email"
-              placeholder="Enter your email"
+              placeholder="name@example.com"
               className="w-full p-3 bg-[var(--color-surface-variant)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] ghost-border outline-none text-[var(--color-on-surface)] placeholder-[var(--color-on-surface-variant)] transition-all"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -54,7 +54,7 @@ function Signup({ onLogin, onSwitchToLogin }) {
             <label className="text-[10px] text-[var(--color-on-surface-variant)] uppercase tracking-widest font-bold mb-1 title-font">Password</label>
             <input
               type="password"
-              placeholder="Create a password"
+              placeholder="Make it secret, make it safe"
               className="w-full p-3 bg-[var(--color-surface-variant)] rounded-lg focus:ring-2 focus:ring-[var(--color-primary)] ghost-border outline-none text-[var(--color-on-surface)] placeholder-[var(--color-on-surface-variant)] transition-all"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -74,7 +74,7 @@ function Signup({ onLogin, onSwitchToLogin }) {
                 </svg>
                 Creating account...
               </>
-            ) : 'Sign Up'}
+            ) : 'Create Account'}
           </button>
         </form>
         <p className="mt-6 text-center text-sm text-[var(--color-on-surface-variant)]">

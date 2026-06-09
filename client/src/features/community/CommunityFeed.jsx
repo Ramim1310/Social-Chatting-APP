@@ -42,7 +42,7 @@ function getCatInfo(post) {
 
 const THREAD_EMOJIS = ['🔥', '💬', '😮', '👍', '😂'];
 
-// ── Live Thread Item ──────────────────────────────────────────────────────────
+
 function LiveThreadItem({ item }) {
   const catKey = item.category?.toLowerCase();
   const borderClass = THREAD_BORDER[catKey] || THREAD_BORDER.default;
@@ -104,7 +104,7 @@ function LiveThreadItem({ item }) {
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+
 export default function CommunityFeed({ user, onBack }) {
   const [posts, setPosts] = useState([]);
   const [liveNews, setLiveNews] = useState([]);
@@ -129,7 +129,7 @@ export default function CommunityFeed({ user, onBack }) {
   // Reactions: { [postId]: { liked: bool, count: number } }
   const [reactions, setReactions] = useState({});
 
-  // ── Data Fetching ─────────────────────────────────────────────────────────
+
   const fetchPosts = useCallback(async () => {
     try {
       const res = await api.get('/api/community/posts');
@@ -166,7 +166,7 @@ export default function CommunityFeed({ user, onBack }) {
     return () => clearInterval(interval);
   }, [fetchPosts, fetchLiveNews]);
 
-  // ── Like handler ──────────────────────────────────────────────────────────
+
   const handleLike = async (postId) => {
     try {
       const res = await api.post(`/api/community/posts/${postId}/like`);
@@ -174,7 +174,7 @@ export default function CommunityFeed({ user, onBack }) {
     } catch (e) { console.error(e); }
   };
 
-  // ── Submit Post ───────────────────────────────────────────────────────────
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!title.trim() || !content.trim()) {
@@ -197,7 +197,7 @@ export default function CommunityFeed({ user, onBack }) {
     }
   };
 
-  // ── Submit Comment ────────────────────────────────────────────────────────
+
   const handleCommentSubmit = async (e, postId) => {
     e.preventDefault();
     const cmt = commentInputs[postId];
@@ -215,7 +215,7 @@ export default function CommunityFeed({ user, onBack }) {
     }
   };
 
-  // ── Filtered posts ────────────────────────────────────────────────────────
+
   const filteredPosts = posts.filter(post =>
     activeCategory === 'All Categories' ||
     post.community?.name?.toLowerCase() === activeCategory.toLowerCase()
@@ -227,7 +227,7 @@ export default function CommunityFeed({ user, onBack }) {
     <div className="w-full h-full flex flex-col bg-[#f0f2fa] overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
       <Toaster position="top-center" toastOptions={{ style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' } }} />
 
-      {/* ── TOP NAV ── */}
+
       <header className="h-[60px] bg-white shrink-0 flex items-center justify-between px-6 border-b border-gray-100 z-50 shadow-sm">
         <button onClick={onBack} className="flex items-center gap-1 group shrink-0">
           <span className="text-[#4a40e0] font-black text-xl tracking-tight" style={{ fontFamily: "'Manrope', sans-serif" }}>NEXUS</span>
@@ -254,10 +254,10 @@ export default function CommunityFeed({ user, onBack }) {
         </div>
       </header>
 
-      {/* ── BODY ── */}
+
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── LEFT SIDEBAR ── */}
+
         <aside className="hidden md:flex flex-col w-[200px] bg-white shrink-0 border-r border-gray-100 py-6 px-4">
           <div className="flex items-center gap-3 mb-8 px-2">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4a40e0] to-[#9795ff] flex items-center justify-center">
@@ -289,7 +289,7 @@ export default function CommunityFeed({ user, onBack }) {
           </nav>
 
           <button onClick={() => setShowCreatePost(true)}
-            className="mt-4 w-full py-3 px-4 rounded-xl bg-gradient-to-br from-[#4a40e0] to-[#3d30d4] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-[0_8px_20px_rgba(74,64,224,0.25)] hover:scale-[1.02] active:scale-[0.98] transition-all">
+            className="mt-4 w-full py-3 px-4 rounded-tl-xl rounded-br-xl rounded-tr-sm rounded-bl-sm border-2 border-[var(--color-on-surface)] bg-[var(--color-primary)] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-[4px_4px_0_var(--color-on-surface)] hover:translate-x-1 hover:-translate-y-1 active:translate-x-0 active:translate-y-0 transition-all">
             <span className="material-symbols-outlined text-[18px]">add</span>
             Create Post
           </button>
@@ -303,7 +303,7 @@ export default function CommunityFeed({ user, onBack }) {
           </div>
         </aside>
 
-        {/* ── CENTRAL FEED ── */}
+
         <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 md:px-8 py-6 custom-scrollbar min-w-0">
           {/* Feed Header */}
           <div className="flex items-center justify-between mb-4">
@@ -334,7 +334,7 @@ export default function CommunityFeed({ user, onBack }) {
               <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
                 className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-gray-900">New Discussion</h2>
+                  <h2 className="font-bold text-gray-900">Create Post</h2>
                   <button onClick={() => setShowCreatePost(false)} className="text-gray-400 hover:text-gray-600"><span className="material-symbols-outlined">close</span></button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-3">
@@ -350,11 +350,11 @@ export default function CommunityFeed({ user, onBack }) {
                     <input type="text" placeholder="Thread Title..." value={title} onChange={e => setTitle(e.target.value)}
                       className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#4a40e0]" />
                   </div>
-                  <textarea placeholder="What's on your mind?" value={content} onChange={e => setContent(e.target.value)}
+                  <textarea placeholder="Spill the tea..." value={content} onChange={e => setContent(e.target.value)}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#4a40e0] min-h-[100px] resize-none custom-scrollbar" />
                   <div className="flex justify-end">
                     <button type="submit" disabled={isSubmitting || !title.trim() || !content.trim()}
-                      className="px-6 py-2.5 rounded-xl bg-gradient-to-br from-[#4a40e0] to-[#3d30d4] text-white font-bold text-sm shadow-[0_8px_20px_rgba(74,64,224,0.2)] hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100">
+                      className="px-6 py-2.5 rounded-tl-xl rounded-br-xl rounded-tr-sm rounded-bl-sm border-2 border-black bg-[var(--color-primary)] text-white font-bold text-sm shadow-[4px_4px_0_#000] hover:-translate-y-1 hover:translate-x-1 active:translate-x-0 active:translate-y-0 transition-all disabled:opacity-50 disabled:transform-none">
                       {isSubmitting ? 'Publishing...' : 'Publish Post'}
                     </button>
                   </div>
@@ -370,7 +370,7 @@ export default function CommunityFeed({ user, onBack }) {
                 <div className="flex flex-col items-center justify-center h-64 text-gray-400">
                   <span className="material-symbols-outlined text-5xl mb-3 opacity-40">forum</span>
                   <p className="font-semibold">No posts in this category yet.</p>
-                  <button onClick={() => setShowCreatePost(true)} className="mt-3 text-[#4a40e0] text-sm font-bold hover:underline">Start a discussion →</button>
+                  <button onClick={() => setShowCreatePost(true)} className="mt-3 text-[#4a40e0] text-sm font-bold hover:underline">Kick things off →</button>
                 </div>
               )}
               {filteredPosts.map((post, idx) => {
@@ -469,7 +469,7 @@ export default function CommunityFeed({ user, onBack }) {
           </div>
         </main>
 
-        {/* ── RIGHT: LIVE THREAD ── */}
+
         <aside className="hidden lg:flex flex-col w-1/4 shrink-0 py-6 px-4 overflow-y-auto custom-scrollbar bg-transparent gap-3">
           {/* Header with blinking red dot */}
           <div className="flex items-center gap-2 px-1 mb-1">
@@ -498,7 +498,7 @@ export default function CommunityFeed({ user, onBack }) {
           ) : (
             <div className="text-center py-8 text-gray-400 text-xs">
               <span className="material-symbols-outlined text-3xl block mb-2 opacity-40">newspaper</span>
-              No live news yet. Check back shortly.
+              Nothing happening yet. Check back later.
             </div>
           )}
 

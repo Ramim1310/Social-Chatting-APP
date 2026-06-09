@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/db');
 
-// JWT Helpers
+
 const generateAccessToken = (user) => {
     return jwt.sign({ userId: user.id, email: user.email }, process.env.ACCESS_TOKEN_SECRET || 'SECRET_KEY', { expiresIn: '15m' });
 };

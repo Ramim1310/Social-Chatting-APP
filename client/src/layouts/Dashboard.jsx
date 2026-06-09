@@ -104,17 +104,13 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   const [showDetailPane, setShowDetailPane] = useState(false);
   const [showDecisionNode, setShowDecisionNode] = useState(false);
 
-  // ── Feature: Polls ────────────────────────────────────────────────────────
   const [polls, setPolls] = useState([]);
   const [showCreatePoll, setShowCreatePoll] = useState(false);
 
-  // ── Feature: Search ───────────────────────────────────────────────────────
   const [showSearch, setShowSearch] = useState(false);
 
-  // ── Feature: Analytics ───────────────────────────────────────────────────
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  // ── Feature: Groups ──────────────────────────────────────────────────────
   const [groups, setGroups] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
 
@@ -129,7 +125,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   const toggleDetailPane = () => setShowDetailPane(prev => !prev);
   const messagesEndRef = React.useRef(null);
 
-  // ── Feature 1 & 2: Message actions + threaded replies ────────────────────
+
   // replyingTo: the message object the user is replying to (null = no active reply)
   const [replyingTo, setReplyingTo] = useState(null);
   // editingId: id of the message currently being edited (null = none)
@@ -364,7 +360,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       if (persistedRoom) {
         joinRoom(persistedRoom, persistedName || persistedRoom);
       } else {
-        joinRoom('global_forum', 'Global Forum');
+        joinRoom('global_forum', 'Public Square');
       }
     }
   }, [user]);
@@ -444,10 +440,10 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
 
                 {activeTab === 'chats' && (
                   <div className="relative">
-                    <label className="block font-body text-xs font-semibold text-[var(--color-on-surface-variant)] mb-1 ml-1">Search conversations</label>
+                    <label className="block font-body text-xs font-semibold text-[var(--color-on-surface-variant)] mb-1 ml-1">Jump to...</label>
                     <div className="relative flex items-center group">
                       <span className="material-symbols-outlined absolute left-4 text-[var(--color-on-surface-variant)] group-focus-within:text-[var(--color-primary)] transition-colors">search</span>
-                      <input className="w-full h-12 pl-12 pr-4 bg-[var(--color-surface-variant)] border-none outline-none rounded-xl focus:ring-1 focus:ring-[var(--color-primary)] focus:bg-[var(--color-surface-container-lowest)] transition-all placeholder:text-[var(--color-on-surface-variant)]/50" placeholder="Find contacts or keywords..." type="text" />
+                      <input className="w-full h-12 pl-12 pr-4 bg-[var(--color-surface-variant)] border-none outline-none rounded-xl focus:ring-1 focus:ring-[var(--color-primary)] focus:bg-[var(--color-surface-container-lowest)] transition-all placeholder:text-[var(--color-on-surface-variant)]/50" placeholder="Search anywhere..." type="text" />
                     </div>
                   </div>
                 )}
@@ -458,7 +454,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                   <>
                     <h3 className="text-xs font-bold text-[var(--color-on-surface-variant)] mb-3 mt-4 uppercase tracking-widest px-2 font-display">Public Rooms</h3>
                     <div
-                      onClick={() => joinRoom('global_forum', 'Global Forum')}
+                      onClick={() => joinRoom('global_forum', 'Public Square')}
                       className={`p-4 rounded-2xl transition-colors flex items-center gap-4 cursor-pointer group ${room === 'global_forum' ? 'bg-[var(--color-surface-container-lowest)] shadow-ambient' : 'hover:bg-[var(--color-surface-container-low)]'}`}
                     >
                       <div className="relative shrink-0">
@@ -468,7 +464,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                       </div>
                       <div className="flex-grow min-w-0">
                         <div className="flex justify-between items-baseline mb-1">
-                          <h3 className="font-display font-bold text-[var(--color-on-surface)] truncate">Global Forum</h3>
+                          <h3 className="font-display font-bold text-[var(--color-on-surface)] truncate">Public Square</h3>
                           <span className="font-body text-[11px] text-[var(--color-on-surface-variant)]/60">Always Open</span>
                         </div>
                         <p className="text-sm text-[var(--color-on-surface-variant)] truncate">Join the public discussion!</p>

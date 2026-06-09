@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const http = require('http');
 const { Server } = require('socket.io');
+const sanitize = require('./src/middlewares/sanitize');
 
 // Load environment variables early on
 dotenv.config();
@@ -14,41 +15,50 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 // Configuration for CORS to keep things secure but accessible for our development
-const allowedOrigins = [
+const rawOrigins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:5175",
+    "http://localhost:3000",
     "https://nexus-app13.vercel.app",
     process.env.CLIENT_URL,
-].filter(Boolean);
+];
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
+// Clean up origins (remove trailing slashes and nulls)
+const allowedOrigins = [...new Set(rawOrigins
+    .filter(Boolean)
+    .map(url => url.replace(/\/$/, "")))];
 
 const corsOptions = {
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl)
+        // Allow requests with no origin (like mobile apps, curl, or same-origin)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
         
-        // In dev mode, we might not have a CLIENT_URL set, so let's be flexible
-        if (isDevelopment && !process.env.CLIENT_URL) return callback(null, true);
+        // Check if origin (without trailing slash) is allowed
+        const cleanOrigin = origin.replace(/\/$/, "");
+        if (allowedOrigins.includes(cleanOrigin)) return callback(null, true);
         
-        callback(new Error(`CORS Error: Origin ${origin} not allowed by security policy.`));
+        // Development fallback
+        if (process.env.NODE_ENV !== 'production') return callback(null, true);
+        
+        callback(new Error(`CORS Error: Origin ${origin} not allowed.`));
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200
 };
 
-// Initialize Socket.io with the same CORS settings
+// Initialize Socket.io with the same clean CORS logic
 const io = new Server(server, {
     cors: {
-        origin: (origin, callback) => {
-            if (!origin) return callback(null, true);
-            if (allowedOrigins.includes(origin)) return callback(null, true);
-            if (!process.env.CLIENT_URL) return callback(null, true);
-            callback(new Error(`CORS: Origin ${origin} not allowed`));
-        },
+        origin: allowedOrigins.length > 0 ? allowedOrigins : true, // true means allow all in dev if list is empty
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    transports: ['websocket', 'polling'] // Ensure both transports are enabled
 });
 
 // We'll use these to track who's online and map user IDs to their socket connections
@@ -72,6 +82,7 @@ app.use(helmet()); // Basic security headers
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Allow larger payloads for profile pics
 app.use(cookieParser());
+app.use(sanitize); // Sanitize incoming request bodies, queries, and params against XSS
 
 // Custom request logger for easier debugging during professional review
 app.use((req, res, next) => {

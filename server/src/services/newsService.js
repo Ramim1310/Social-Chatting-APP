@@ -23,7 +23,7 @@ async function fetchNews() {
 
                 await prisma.newsArticle.upsert({
                     where: { link: item.link },
-                    update: {}, // Don't override if it exists
+                    update: {},
                     create: {
                         title: item.title.replace(` - ${source}`, ''),
                         link: item.link,

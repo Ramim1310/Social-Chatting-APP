@@ -2,7 +2,11 @@ const Parser = require('rss-parser');
 const cron = require('node-cron');
 const prisma = require('../config/db');
 
-const parser = new Parser();
+const parser = new Parser({
+    headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+});
 
 const categories = {
     'gaming': 'https://news.google.com/rss/search?q=gaming+news+when:3h&hl=en-US',
@@ -19,13 +23,14 @@ async function fetchNews() {
             const feed = await parser.parseURL(url);
             
             for (const item of feed.items) {
-                let source = item.creator || feed.title.split(' - ').pop() || 'Google News';
+                let source = item.creator || item.source || (item.title && item.title.includes(' - ') ? item.title.split(' - ').pop() : 'Google News');
+                let cleanTitle = item.title ? item.title.replace(` - ${source}`, '') : 'No Title';
 
                 await prisma.newsArticle.upsert({
                     where: { link: item.link },
                     update: {},
                     create: {
-                        title: item.title.replace(` - ${source}`, ''),
+                        title: cleanTitle,
                         link: item.link,
                         pubDate: new Date(item.pubDate || new Date()),
                         source: source,

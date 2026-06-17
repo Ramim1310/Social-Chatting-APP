@@ -1,3 +1,6 @@
+# Live Demo:
+https://nexus-app13.vercel.app/
+
 # Nexus
 
 A high-performance real-time social platform combining persistent community forums with low-latency WebSocket messaging.

@@ -106,8 +106,8 @@ const getLiveNews = async (req, res) => {
     const { extended } = req.query;
     try {
         const since = extended === 'true'
-            ? new Date(Date.now() - 3 * 60 * 60 * 1000)
-            : new Date(Date.now() - 24 * 60 * 60 * 1000);
+            ? new Date(Date.now() - 24 * 60 * 60 * 1000) // Show More: last 24 hours
+            : new Date(Date.now() - 3 * 60 * 60 * 1000);  // Default: last 3 hours
         const news = await prisma.newsArticle.findMany({
             where: { pubDate: { gte: since } },
             orderBy: { pubDate: 'desc' },
@@ -124,7 +124,12 @@ const getCategoryNews = async (req, res) => {
     const { category } = req.params;
     try {
         const news = await prisma.newsArticle.findMany({
-            where: { category },
+            where: {
+                category: {
+                    equals: category,
+                    mode: 'insensitive'
+                }
+            },
             orderBy: { pubDate: 'desc' },
             take: 20
         });

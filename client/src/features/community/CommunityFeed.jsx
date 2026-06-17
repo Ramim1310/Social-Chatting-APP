@@ -508,7 +508,7 @@ export default function CommunityFeed({ user, onBack }) {
               onClick={async () => { setShowExtended(true); await fetchExtendedNews(); }}
               className="mt-2 w-full py-2.5 rounded-xl border border-[#4a40e0] text-[#4a40e0] font-semibold text-xs hover:bg-[#eef0ff] transition-colors flex items-center justify-center gap-1">
               <span className="material-symbols-outlined text-[16px]">expand_more</span>
-              Show More (Past 3 Hours)
+              Show More (Past 24 Hours)
             </button>
           ) : extendedLoading ? (
             <div className="text-center py-2 text-xs text-gray-400 animate-pulse">Loading extended feed...</div>

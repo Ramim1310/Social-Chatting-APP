@@ -9,10 +9,10 @@ const parser = new Parser({
 });
 
 const categories = {
-    'gaming': 'https://news.google.com/rss/search?q=gaming+news+when:3h&hl=en-US',
-    'sports': 'https://news.google.com/rss/search?q=sports+news+when:3h&hl=en-US',
-    'anime': 'https://news.google.com/rss/search?q=anime+news+when:3h&hl=en-US',
-    'movie': 'https://news.google.com/rss/search?q=movies+news+when:3h&hl=en-US'
+    'gaming': 'https://news.google.com/rss/search?q=gaming+news+when:24h&hl=en-US',
+    'sports': 'https://news.google.com/rss/search?q=sports+news+when:24h&hl=en-US',
+    'anime': 'https://news.google.com/rss/search?q=anime+news+when:24h&hl=en-US',
+    'movie': 'https://news.google.com/rss/search?q=movies+news+when:24h&hl=en-US'
 };
 
 async function fetchNews() {
@@ -26,13 +26,17 @@ async function fetchNews() {
                 let source = item.creator || item.source || (item.title && item.title.includes(' - ') ? item.title.split(' - ').pop() : 'Google News');
                 let cleanTitle = item.title ? item.title.replace(` - ${source}`, '') : 'No Title';
 
+                // Ensure pubDate is a valid Date object, falling back to current date if invalid
+                const parsedDate = new Date(item.pubDate);
+                const pubDate = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+
                 await prisma.newsArticle.upsert({
                     where: { link: item.link },
                     update: {},
                     create: {
                         title: cleanTitle,
                         link: item.link,
-                        pubDate: new Date(item.pubDate || new Date()),
+                        pubDate: pubDate,
                         source: source,
                         category: category
                     }
@@ -44,11 +48,11 @@ async function fetchNews() {
         }
     }
 
-    // Clean up older than 24 hours to prevent DB bloat
+    // Clean up older than 7 days to prevent DB bloat while maintaining a robust fallback cache
     try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const deleted = await prisma.newsArticle.deleteMany({
-            where: { createdAt: { lt: twentyFourHoursAgo } }
+            where: { createdAt: { lt: sevenDaysAgo } }
         });
         if (deleted.count > 0) {
             console.log(`[NEWS SERVICE] Purged ${deleted.count} old articles.`);

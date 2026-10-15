@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+let refreshPromise = null;
+
 // Create a new Axios instance
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
@@ -33,16 +35,18 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     
     // If 401 and not already retrying
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const isAuthRequest = /\/api\/auth\/(login|register|refresh_token)/.test(originalRequest?.url || '');
+    if (error.response?.status === 401 && originalRequest && !isAuthRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       
       try {
         // Attempt refresh using plain axios to avoid interceptor loop
-        const { data } = await axios.post(
+        if (!refreshPromise) refreshPromise = axios.post(
           `${api.defaults.baseURL}/api/auth/refresh_token`, 
           {}, 
           { withCredentials: true }
-        );
+        ).finally(() => { refreshPromise = null; });
+        const { data } = await refreshPromise;
         
         // Update local storage / state with new token
         localStorage.setItem('token', data.accessToken);

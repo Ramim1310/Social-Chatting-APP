@@ -16,19 +16,17 @@ const getMessages = async (req, res) => {
 };
 
 const sendMessage = async (req, res) => {
-    const { room, content, email, senderId, tempId } = req.body;
+    const { room, content, tempId } = req.body;
+    if (typeof content !== 'string' || !content.trim() || typeof room !== 'string' || !room.trim()) {
+        return res.status(400).json({ error: 'A room and message are required.' });
+    }
     try {
-        let user;
-        if (senderId) {
-            user = await prisma.user.findUnique({ where: { id: senderId } });
-        } else {
-            user = await prisma.user.findUnique({ where: { email } });
-        }
+        const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
 
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const newMessage = await prisma.message.create({
-            data: { content, senderId: user.id, room, status: 'sent' },
+            data: { content: content.trim(), senderId: user.id, room, status: 'sent' },
             include: { sender: true }
         });
 
@@ -38,12 +36,12 @@ const sendMessage = async (req, res) => {
         if (io && userSockets) {
             const senderSocketId = userSockets.get(user.id);
             if (senderSocketId) {
-                io.to(room).except(senderSocketId).emit('receive_message', newMessage);
+                io.to(room).except(senderSocketId).emit('receive_message', { ...newMessage, tempId });
                 io.to(senderSocketId).emit('message_sent', {
                     tempId, id: newMessage.id, status: 'sent', timestamp: newMessage.timestamp
                 });
             } else {
-                io.to(room).emit('receive_message', newMessage);
+                io.to(room).emit('receive_message', { ...newMessage, tempId });
             }
         }
 
@@ -183,4 +181,39 @@ const getRoomAnalytics = async (req, res) => {
     }
 };
 
-module.exports = { getMessages, sendMessage, searchMessages, createPoll, votePoll, getPolls, getRoomAnalytics };
+const editMessage = async (req, res) => {
+    const id = Number(req.params.messageId);
+    const content = req.body.content;
+    if (!Number.isSafeInteger(id) || id < 1 || typeof content !== 'string' || !content.trim()) {
+        return res.status(400).json({ error: 'A valid message and content are required.' });
+    }
+    try {
+        const existing = await prisma.message.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ error: 'Message not found.' });
+        if (existing.senderId !== req.user.userId) return res.status(403).json({ error: 'You can only edit your own messages.' });
+        const message = await prisma.message.update({ where: { id }, data: { content: content.trim() }, include: { sender: true } });
+        req.app.get('io')?.to(existing.room).emit('message_updated', message);
+        res.json(message);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Could not update the message.' });
+    }
+};
+
+const deleteMessage = async (req, res) => {
+    const id = Number(req.params.messageId);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid message.' });
+    try {
+        const existing = await prisma.message.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ error: 'Message not found.' });
+        if (existing.senderId !== req.user.userId) return res.status(403).json({ error: 'You can only delete your own messages.' });
+        await prisma.message.delete({ where: { id } });
+        req.app.get('io')?.to(existing.room).emit('message_deleted', { id, room: existing.room });
+        res.sendStatus(204);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Could not delete the message.' });
+    }
+};
+
+module.exports = { getMessages, sendMessage, searchMessages, createPoll, votePoll, getPolls, getRoomAnalytics, editMessage, deleteMessage };

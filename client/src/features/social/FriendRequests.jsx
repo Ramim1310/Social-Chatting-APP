@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 function FriendRequests({ currentUser, onActionComplete }) {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(new Set());
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     if (!currentUser || !currentUser.id) {
       setLoading(false);
       return;
@@ -21,13 +22,15 @@ function FriendRequests({ currentUser, onActionComplete }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser]);
 
   useEffect(() => {
     fetchRequests();
-  }, [currentUser]);
+  }, [fetchRequests]);
 
   const handleAction = async (requestId, action) => {
+    if (pending.has(requestId)) return;
+    setPending(previous => new Set(previous).add(requestId));
     try {
       const response = await api.post(`/api/users/friend-request/${action}`, { requestId });
 
@@ -44,7 +47,7 @@ function FriendRequests({ currentUser, onActionComplete }) {
     } catch (error) {
       console.error(`Failed to ${action}`, error);
       toast.error(`Failed to ${action} request`);
-    }
+    } finally { setPending(previous => { const next = new Set(previous); next.delete(requestId); return next; }); }
   };
 
   return (
@@ -84,13 +87,13 @@ function FriendRequests({ currentUser, onActionComplete }) {
 
             <div className="flex gap-2">
               <button
-                onClick={() => handleAction(req.id, 'accept')}
+                disabled={pending.has(req.id)} onClick={() => handleAction(req.id, 'accept')}
                 className="flex-1 py-2 bg-[var(--color-secondary)]/15 text-[var(--color-secondary)] border border-[var(--color-secondary)]/25 text-xs font-bold rounded-xl hover:bg-[var(--color-secondary)]/25 transition-all"
               >
                 Accept
               </button>
               <button
-                onClick={() => handleAction(req.id, 'reject')}
+                disabled={pending.has(req.id)} onClick={() => handleAction(req.id, 'reject')}
                 className="flex-1 py-2 bg-[var(--color-error)]/10 text-[var(--color-error)] border border-[var(--color-error)]/20 text-xs font-bold rounded-xl hover:bg-[var(--color-error)]/20 transition-all"
               >
                 Decline

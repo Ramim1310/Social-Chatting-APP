@@ -51,7 +51,9 @@ const updateCurrentUser = async (req, res) => {
 };
 
 const sendFriendRequest = async (req, res) => {
-    const { senderId, receiverId } = req.body;
+    const senderId = req.user.userId;
+    const receiverId = Number(req.body.receiverId);
+    if (!Number.isSafeInteger(receiverId) || receiverId < 1) return res.status(400).json({ error: 'Choose a valid recipient.' });
     if (senderId === receiverId) return res.status(400).json({ error: "Cannot send request to yourself" });
 
     try {
@@ -70,8 +72,13 @@ const sendFriendRequest = async (req, res) => {
         }
 
         const request = await prisma.friendRequest.create({
-            data: { senderId, receiverId, status: 'pending' }
+            data: { senderId, receiverId, status: 'pending' },
+            include: { sender: { select: { name: true } } }
         });
+        const receiverSocket = req.app.get('userSockets')?.get(receiverId);
+        if (receiverSocket) {
+            req.app.get('io')?.to(receiverSocket).emit('friend_request_received', { senderName: request.sender?.name || 'Someone' });
+        }
         res.json(request);
     } catch (e) {
         console.error(e);

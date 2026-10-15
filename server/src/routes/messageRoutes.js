@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middlewares/authMiddleware');
 const {
-    getMessages, sendMessage, searchMessages,
+    getMessages, sendMessage, searchMessages, editMessage, deleteMessage,
     createPoll, votePoll, getPolls, getRoomAnalytics
 } = require('../controllers/messageController');
 
@@ -15,5 +15,7 @@ router.post('/polls/:pollId/vote', authenticateToken, votePoll);
 router.get('/polls/:room', authenticateToken, getPolls);
 
 router.get('/analytics/room/:room', authenticateToken, getRoomAnalytics);
+router.patch('/:messageId', authenticateToken, editMessage);
+router.delete('/:messageId', authenticateToken, deleteMessage);
 
 module.exports = router;

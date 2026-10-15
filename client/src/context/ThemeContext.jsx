@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-const ThemeCtx = createContext(null);
+import { ThemeCtx } from './useTheme';
 
 const STORAGE_KEY = 'cg_prefs';
 
@@ -49,7 +49,7 @@ export function ThemeProvider({ children }) {
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.18);
-    } catch (_) {}
+    } catch { /* Audio may be unavailable in this browser. */ }
   }, [prefs.soundEffects]);
 
   // Request notification permission when toggled on
@@ -85,6 +85,3 @@ export function ThemeProvider({ children }) {
   );
 }
 
-export function useTheme() {
-  return useContext(ThemeCtx);
-}

@@ -1,4 +1,5 @@
-const { io } = require('socket.io-client');
+import { io } from 'socket.io-client';
+import process from 'node:process';
 const socket = io('http://localhost:5000');
 
 socket.on('connect', () => {

@@ -20,11 +20,11 @@ function formatCount(n) {
 const RoomAnalytics = ({ room }) => {
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [tooltip, setTooltip] = useState(null); // { day, hour, count, x, y }
+
 
     useEffect(() => {
         if (!room) return;
-        setIsLoading(true);
+        queueMicrotask(() => setIsLoading(true));
         api.get(`/api/messages/analytics/room/${encodeURIComponent(room)}`)
             .then(res => setData(res.data))
             .catch(console.error)

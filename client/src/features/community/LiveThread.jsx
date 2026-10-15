@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 
+const communities = ['gaming', 'sports', 'anime', 'movie'];
 const LiveThread = () => {
     const [updates, setUpdates] = useState({
         sports: [], anime: [], movie: [], gaming: []
@@ -9,7 +10,7 @@ const LiveThread = () => {
     const [activeTab, setActiveTab] = useState('gaming');
     const [loading, setLoading] = useState(true);
 
-    const communities = ['gaming', 'sports', 'anime', 'movie'];
+
 
     useEffect(() => {
         let isMounted = true;
@@ -80,24 +81,24 @@ const LiveThread = () => {
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar relative">
                 <AnimatePresence mode="popLayout">
                     {loading && updates[activeTab]?.length === 0 ? (
-                        <motion.div 
+                        <Motion.div 
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="flex flex-col items-center justify-center h-full text-slate-500 opacity-70"
                         >
                             <svg className="animate-spin w-12 h-12 mb-3 text-indigo-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             <span className="text-sm font-medium">Fetching RSS Feeds...</span>
-                        </motion.div>
+                        </Motion.div>
                     ) : updates[activeTab]?.length === 0 ? (
-                        <motion.div 
+                        <Motion.div 
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                             className="flex flex-col items-center justify-center h-full text-slate-500 opacity-70"
                         >
                             <svg className="w-12 h-12 mb-3 text-slate-500/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                             <span className="text-sm font-medium">No recent news found.</span>
-                        </motion.div>
+                        </Motion.div>
                     ) : (
                         updates[activeTab].map((item, idx) => (
-                            <motion.div
+                            <Motion.div
                                 layout
                                 initial={{ opacity: 0, x: 20, scale: 0.95 }}
                                 animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -121,7 +122,7 @@ const LiveThread = () => {
                                 >
                                     {item.content}
                                 </a>
-                            </motion.div>
+                            </Motion.div>
                         ))
                     )}
                 </AnimatePresence>

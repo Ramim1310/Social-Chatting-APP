@@ -1,14 +1,17 @@
 import React, { useState, useRef } from 'react';
 import api from '../../services/api';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../context/useTheme';
 
 // ── Toggle Switch ─────────────────────────────────────────────────────────────
-function Toggle({ checked, onChange }) {
+function Toggle({ checked, onChange, label }) {
   return (
     <button
       onClick={() => onChange(!checked)}
+      role="switch"
+      aria-checked={checked}
+      aria-label={label || 'Toggle preference'}
       className={`relative w-12 h-6 rounded-full transition-all duration-300 focus:outline-none ${checked ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-surface-container-high)]'}`}
     >
       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${checked ? 'translate-x-6' : 'translate-x-0'}`} />
@@ -19,7 +22,7 @@ function Toggle({ checked, onChange }) {
 // ── Section Card ──────────────────────────────────────────────────────────────
 function SettingsCard({ icon, iconBg, title, children }) {
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="bg-[var(--color-surface-container-lowest)] rounded-2xl border border-[var(--color-outline-variant)]/20 shadow-sm p-7 space-y-6"
     >
@@ -30,12 +33,12 @@ function SettingsCard({ icon, iconBg, title, children }) {
         <h2 className="text-xl font-black text-[var(--color-on-surface)]" style={{ fontFamily: "'Manrope', sans-serif" }}>{title}</h2>
       </div>
       {children}
-    </motion.div>
+    </Motion.div>
   );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function Settings({ user, onUserUpdate }) {
+export default function Settings({ user, onUserUpdate, onLogout }) {
   const { prefs, updatePref } = useTheme();
   const fileInputRef = useRef(null);
 
@@ -56,6 +59,7 @@ export default function Settings({ user, onUserUpdate }) {
   const handleImagePick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Choose an image file.'); return; }
     if (file.size > 2 * 1024 * 1024) { toast.error('Image must be under 2MB'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -77,7 +81,7 @@ export default function Settings({ user, onUserUpdate }) {
       onUserUpdate(res.data);
       toast.success('Profile updated!');
       setImageBase64(null);
-    } catch (e) {
+    } catch {
       toast.error('Failed to save profile.');
     }
     setSavingProfile(false);
@@ -102,8 +106,9 @@ export default function Settings({ user, onUserUpdate }) {
     <div className="w-full h-full overflow-y-auto bg-[var(--color-surface)] custom-scrollbar transition-colors duration-300" style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* Top Bar */}
-      <header className="sticky top-0 z-40 bg-[var(--color-surface)]/90 backdrop-blur-sm border-b border-[var(--color-outline-variant)]/15 px-8 py-4 flex items-center justify-between">
-        <h1 className="text-sm font-bold tracking-widest text-[var(--color-on-surface-variant)] uppercase">Settings &amp; Personalization</h1>
+      <header className="sticky top-0 z-40 bg-[var(--color-surface)]/90 backdrop-blur-sm border-b border-[var(--color-outline-variant)]/15 px-4 sm:px-8 py-4 flex items-center justify-between">
+        <h1 className="text-lg font-display font-bold text-[var(--color-on-surface)]">Make it yours</h1>
+        <button onClick={onLogout} className="text-sm font-bold text-[var(--color-error)] flex items-center gap-1"><span aria-hidden="true" className="material-symbols-outlined text-lg">logout</span> Log out</button>
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-[var(--color-surface-container-high)] flex items-center justify-center">
             <span className="material-symbols-outlined text-[var(--color-on-surface-variant)] text-[18px]">account_circle</span>
@@ -212,7 +217,7 @@ export default function Settings({ user, onUserUpdate }) {
                     <p className="font-semibold text-sm text-[var(--color-on-surface)]">{label}</p>
                     <p className="text-xs text-[var(--color-on-surface-variant)] mt-0.5">{desc}</p>
                   </div>
-                  <Toggle checked={prefs[key]} onChange={(v) => updatePref(key, v)} />
+                  <Toggle label={label} checked={prefs[key]} onChange={(v) => updatePref(key, v)} />
                 </div>
               ))}
 

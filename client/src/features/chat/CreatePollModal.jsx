@@ -1,9 +1,11 @@
+import useModalFocus from '../../components/common/useModalFocus';
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 const CreatePollModal = ({ room, onClose, onCreated }) => {
+    const modalRef = useModalFocus(true, onClose);
     const [question, setQuestion] = useState('');
     const [options, setOptions] = useState(['', '']);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +47,8 @@ const CreatePollModal = ({ room, onClose, onCreated }) => {
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-            <motion.div
+            <Motion.div
+                ref={modalRef} role="dialog" aria-modal="true" aria-label="Create a poll"
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -129,7 +132,7 @@ const CreatePollModal = ({ room, onClose, onCreated }) => {
                         {isSubmitting ? 'Creating...' : 'Create Poll'}
                     </button>
                 </div>
-            </motion.div>
+            </Motion.div>
         </div>
     );
 };

@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import * as Y from 'yjs';
 import { ySyncPlugin, yCursorPlugin, yUndoPlugin, undo, redo } from '@tiptap/y-tiptap';
 import { Awareness } from 'y-protocols/awareness';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 // Fallback WS URL
 const WS_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5000')
@@ -66,9 +66,9 @@ class YjsWebSocketProvider {
         const payload = data.slice(1);
         // Decode and apply awareness state (simplified)
         try {
-          const decoded = new TextDecoder().decode(payload);
+          new TextDecoder().decode(payload);
           // Awareness protocol is complex; we just re-broadcast raw
-        } catch (_) {}
+        } catch { /* Ignore malformed awareness payloads. */ }
       }
     };
 
@@ -76,7 +76,7 @@ class YjsWebSocketProvider {
       this._status = 'disconnected';
       this._onStatus?.('disconnected');
       // Reconnect after 2 seconds
-      setTimeout(() => this._connect(), 2000);
+      if (!this._destroyed) this._reconnectTimer = setTimeout(() => this._connect(), 2000);
     };
 
     this.ws.onerror = () => {
@@ -101,6 +101,8 @@ class YjsWebSocketProvider {
   }
 
   destroy() {
+    this._destroyed = true;
+    clearTimeout(this._reconnectTimer);
     this.ws?.close();
     this.ydoc.off('update', this._send);
   }
@@ -112,7 +114,7 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
   const providerRef = useRef(null);
   const ydocRef = useRef(null);
   const awarenessRef = useRef(null);
-  const userColor = useRef(randomColor());
+  const [userColor] = useState(randomColor);
 
   // Initialise Yjs + provider once
   useEffect(() => {
@@ -123,7 +125,7 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
 
     awareness.setLocalStateField('user', {
       name: user?.name || 'Anonymous',
-      color: userColor.current,
+      color: userColor,
     });
 
     const wsUrl = `${WS_BASE}/yjs/${encodeURIComponent(room)}-decision-node`;
@@ -135,7 +137,7 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
       provider.destroy();
       ydoc.destroy();
     };
-  }, [room, user]);
+  }, [room, user, userColor]);
 
   const editor = useEditor({
     extensions: [
@@ -150,7 +152,7 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
       if (!ydocRef.current) return;
       const yXmlFragment = ydocRef.current.getXmlFragment('document');
       // Inject Yjs ProseMirror plugins directly
-      const tr = e.state.tr;
+
       const newState = e.state.reconfigure({
         plugins: [
           ...e.state.plugins,
@@ -170,12 +172,12 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
   };
 
   return (
-    <motion.div
+    <Motion.div
       initial={{ x: '100%', opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '100%', opacity: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="w-[380px] shrink-0 border-l border-[var(--color-outline-variant)]/40 bg-[var(--color-surface)] flex flex-col h-full shadow-2xl z-40 relative overflow-hidden"
+      className="room-panel w-[380px] shrink-0 border-l border-[var(--color-outline-variant)]/40 bg-[var(--color-surface)] flex flex-col h-full shadow-2xl z-40 relative overflow-hidden"
       onKeyDown={handleKeyDown}
     >
       {/* Header */}
@@ -223,13 +225,13 @@ const DecisionNodeEditor = ({ room, user, onClose }) => {
       <div className="px-5 py-3 border-t border-[var(--color-outline-variant)]/20 flex items-center gap-2 shrink-0">
         <div
           className="w-2.5 h-2.5 rounded-full shrink-0"
-          style={{ backgroundColor: userColor.current }}
+          style={{ backgroundColor: userColor }}
         />
         <span className="text-xs text-[var(--color-on-surface-variant)] font-medium">
           {user?.name || 'You'} (you)
         </span>
       </div>
-    </motion.div>
+    </Motion.div>
   );
 };
 

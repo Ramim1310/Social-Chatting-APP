@@ -18,7 +18,7 @@ const getPosts = async (req, res) => {
             orderBy: { createdAt: 'desc' },
             take: 50
         });
-        res.json(posts);
+        res.json(posts.map(post => ({ ...post, likeCount: postLikes.get(post.id)?.size || 0, likedByMe: postLikes.get(post.id)?.has(req.user.userId) || false })));
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Failed to fetch posts" });

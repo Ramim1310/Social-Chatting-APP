@@ -1,50 +1,42 @@
+import useModalFocus from '../../components/common/useModalFocus';
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 
 // ── Strips HTML tags from ts_headline output for safe display ────────────────
 // We safely render the highlighted HTML using dangerouslySetInnerHTML since it
 // comes from our own trusted PostgreSQL server.
-const Headline = ({ html }) => (
-    <span
-        className="text-xs text-[var(--color-on-surface-variant)] leading-relaxed [&_b]:text-[var(--color-primary)] [&_b]:font-bold"
-        dangerouslySetInnerHTML={{ __html: html }}
-    />
-);
+const Headline = ({ html }) => <span className="text-xs text-[var(--color-on-surface-variant)] leading-relaxed">{String(html || '').split(/<b>(.*?)<\/b>/gi).map((part, index) => index % 2 ? <mark key={index} className="bg-[var(--color-primary-fixed)] text-[var(--color-primary)] rounded px-0.5">{part.replace(/<[^>]*>/g, '')}</mark> : part.replace(/<[^>]*>/g, ''))}</span>;
 
 const SearchModal = ({ onClose, currentRoom }) => {
+    const modalRef = useModalFocus(true, onClose);
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [scopeToRoom, setScopeToRoom] = useState(Boolean(currentRoom));
     const inputRef = useRef(null);
-    const debounceRef = useRef(null);
+
 
     // Focus input on mount
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
-    // Debounced search as user types
+    // Cancel older searches so their results cannot replace a newer query.
     useEffect(() => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (!query.trim()) {
-            setResults([]);
-            return;
-        }
-        debounceRef.current = setTimeout(async () => {
+        const controller = new AbortController();
+        const timer = setTimeout(async () => {
+            if (!query.trim()) { setResults([]); setIsSearching(false); return; }
             setIsSearching(true);
             try {
-                const params = { q: query };
+                const params = { q: query.trim() };
                 if (scopeToRoom && currentRoom) params.room = currentRoom;
-                const { data } = await api.get('/api/messages/search', { params });
-                setResults(data);
-            } catch (err) {
-                console.error('[SEARCH] Error:', err);
-            } finally {
-                setIsSearching(false);
-            }
+                const { data } = await api.get('/api/messages/search', { params, signal: controller.signal });
+                if (!controller.signal.aborted) setResults(data);
+            } catch (err) { if (err.code !== 'ERR_CANCELED') setResults([]); }
+            finally { if (!controller.signal.aborted) setIsSearching(false); }
         }, 300);
+        return () => { clearTimeout(timer); controller.abort(); };
     }, [query, scopeToRoom, currentRoom]);
 
     // Close on Escape
@@ -62,10 +54,11 @@ const SearchModal = ({ onClose, currentRoom }) => {
 
     return (
         <div
+            ref={modalRef} role="dialog" aria-modal="true" aria-label="Search messages"
             className="fixed inset-0 z-[150] flex items-start justify-center pt-[10vh] bg-black/50 backdrop-blur-sm px-4"
             onClick={(e) => e.target === e.currentTarget && onClose()}
         >
-            <motion.div
+            <Motion.div
                 initial={{ opacity: 0, y: -20, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -20, scale: 0.97 }}
@@ -82,6 +75,7 @@ const SearchModal = ({ onClose, currentRoom }) => {
                         type="text"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
+                        aria-label="Search messages"
                         placeholder="Search all messages..."
                         className="flex-1 bg-transparent text-sm font-medium text-[var(--color-on-surface)] placeholder:text-[var(--color-outline)] focus:outline-none"
                     />
@@ -146,7 +140,7 @@ const SearchModal = ({ onClose, currentRoom }) => {
                         </div>
                     ) : null}
                 </div>
-            </motion.div>
+            </Motion.div>
         </div>
     );
 };

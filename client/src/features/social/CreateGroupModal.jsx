@@ -1,9 +1,11 @@
+import useModalFocus from '../../components/common/useModalFocus';
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
 export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated }) {
+    const modalRef = useModalFocus(isOpen, onClose);
     const [groupName, setGroupName] = useState('');
     const [selectedFriends, setSelectedFriends] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,8 +48,8 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
 
     return (
         <AnimatePresence>
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                <motion.div
+            <div ref={modalRef} role="dialog" aria-modal="true" aria-label="Create a group" className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                <Motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -55,23 +57,23 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                     onClick={onClose}
                 />
                 
-                <motion.div
+                <Motion.div
                     initial={{ scale: 0.95, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                    className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]"
+                    className="relative w-full max-w-md bg-[var(--color-surface-container-lowest)] rounded-3xl shadow-2xl border border-[var(--color-outline-variant)]/30 overflow-hidden flex flex-col max-h-[90vh]"
                 >
-                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="px-6 py-5 border-b border-[var(--color-outline-variant)]/30 flex items-center justify-between bg-[var(--color-surface)]/50">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
                                 <span className="material-symbols-outlined font-medium">group_add</span>
                             </div>
                             <div>
-                                <h3 className="font-display font-bold text-slate-800 text-lg leading-tight">Create Group</h3>
-                                <p className="text-xs text-slate-500 font-medium mt-0.5">Start a new group chat</p>
+                                <h3 className="font-display font-bold text-[var(--color-on-surface)] text-lg leading-tight">Create Group</h3>
+                                <p className="text-xs text-[var(--color-on-surface-variant)] font-medium mt-0.5">Start a new group chat</p>
                             </div>
                         </div>
-                        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200/50 text-slate-400 hover:text-slate-600 transition-colors">
+                        <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200/50 text-slate-400 hover:text-[var(--color-on-surface-variant)] transition-colors">
                             <span className="material-symbols-outlined text-[20px]">close</span>
                         </button>
                     </div>
@@ -79,19 +81,19 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                     <div className="p-6 overflow-y-auto custom-scrollbar">
                         <form id="create-group-form" onSubmit={handleSubmit} className="space-y-6">
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Group Name</label>
+                                <label className="block text-sm font-bold text-[var(--color-on-surface)] mb-2">Group Name</label>
                                 <input
                                     type="text"
                                     placeholder="e.g. Weekend Warriors"
                                     value={groupName}
                                     onChange={(e) => setGroupName(e.target.value)}
-                                    className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 transition-all font-medium text-slate-700 outline-none placeholder:text-slate-400"
+                                    className="w-full h-12 px-4 rounded-xl border border-[var(--color-outline-variant)]/50 bg-[var(--color-surface)] focus:bg-[var(--color-surface-container-lowest)] focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 transition-all font-medium text-[var(--color-on-surface)] outline-none placeholder:text-slate-400"
                                     autoFocus
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Invite Friends</label>
+                                <label className="block text-sm font-bold text-[var(--color-on-surface)] mb-2">Invite Friends</label>
                                 {user?.friends?.length > 0 ? (
                                     <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                         {user.friends.map(friend => {
@@ -101,7 +103,7 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                                                     key={friend.id}
                                                     type="button"
                                                     onClick={() => toggleFriend(friend.id)}
-                                                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-indigo-400 bg-indigo-50 shadow-sm' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`}
+                                                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${isSelected ? 'border-indigo-400 bg-indigo-50 shadow-sm' : 'border-[var(--color-outline-variant)]/30 hover:border-slate-300 hover:bg-[var(--color-surface)]'}`}
                                                 >
                                                     {friend.image ? (
                                                         <img src={friend.image} className="w-10 h-10 rounded-full object-cover" alt="" />
@@ -111,9 +113,9 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                                                         </div>
                                                     )}
                                                     <div className="flex-1 text-left">
-                                                        <span className={`block text-sm font-bold ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{friend.name}</span>
+                                                        <span className={`block text-sm font-bold ${isSelected ? 'text-indigo-900' : 'text-[var(--color-on-surface)]'}`}>{friend.name}</span>
                                                     </div>
-                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-500 text-white' : 'border-2 border-slate-200'}`}>
+                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isSelected ? 'bg-indigo-500 text-white' : 'border-2 border-[var(--color-outline-variant)]/50'}`}>
                                                         {isSelected && <span className="material-symbols-outlined text-[14px] font-bold">check</span>}
                                                     </div>
                                                 </button>
@@ -121,7 +123,7 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="p-4 rounded-xl bg-slate-50 text-center border border-slate-100 text-slate-500 text-sm">
+                                    <div className="p-4 rounded-xl bg-[var(--color-surface)] text-center border border-[var(--color-outline-variant)]/30 text-[var(--color-on-surface-variant)] text-sm">
                                         You don't have any friends yet to invite to a group.
                                     </div>
                                 )}
@@ -129,11 +131,11 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                         </form>
                     </div>
 
-                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                    <div className="px-6 py-4 border-t border-[var(--color-outline-variant)]/30 bg-[var(--color-surface)] flex justify-end gap-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-600 hover:bg-slate-200/50 transition-colors"
+                            className="px-5 py-2.5 rounded-xl font-bold text-sm text-[var(--color-on-surface-variant)] hover:bg-slate-200/50 transition-colors"
                         >
                             Cancel
                         </button>
@@ -146,7 +148,7 @@ export default function CreateGroupModal({ isOpen, onClose, user, onGroupCreated
                             {isSubmitting ? 'Creating...' : 'Create Group'}
                         </button>
                     </div>
-                </motion.div>
+                </Motion.div>
             </div>
         </AnimatePresence>
     );

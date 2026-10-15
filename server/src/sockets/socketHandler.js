@@ -17,6 +17,11 @@ module.exports = function(io, userSockets, onlineUsers) {
         socket.on('join_room', (data) => {
             socket.join(data);
         });
+        socket.on('leave_room', (room) => {
+            if (typeof room !== 'string') return;
+            socket.to(room).emit('hide_typing', socket.id);
+            socket.leave(room);
+        });
 
         socket.on('send_message', async (data) => {
             const { room, author, content, email, senderId, tempId } = data;

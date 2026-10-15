@@ -1,26 +1,30 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import socket from "../services/socket";
 import Sidebar from "../components/common/Sidebar";
+import Home from "../components/common/Home";
+import Dialog from "../components/common/Dialog";
+import { getRecentConversations, rememberConversation } from '../services/conversationHistory';
 import CommunityFeed from "../features/community/CommunityFeed";
 import Settings from "../components/common/Settings";
 import SearchUsers from "../features/social/SearchUsers";
 import FriendRequests from "../features/social/FriendRequests";
 import TypingIndicator from "../features/chat/TypingIndicator";
 import EmptyState from "../components/common/EmptyState";
-import DecisionNodeEditor from "../features/chat/DecisionNodeEditor";
 import PollMessage from "../features/chat/PollMessage";
 import CreatePollModal from "../features/chat/CreatePollModal";
 import CreateGroupModal from "../features/social/CreateGroupModal";
 import SearchModal from "../features/chat/SearchModal";
-import RoomAnalytics from "../features/chat/RoomAnalytics";
 import MobileNav from "../components/common/MobileNav";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import toast, { Toaster } from 'react-hot-toast';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '../context/useTheme';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+const DecisionNodeEditor = lazy(() => import('../features/chat/DecisionNodeEditor'));
+const RoomAnalytics = lazy(() => import('../features/chat/RoomAnalytics'));
 
 // ── Markdown renderer with custom styled components ──────────────────────────
 const MarkdownContent = ({ content, isMe }) => (
@@ -34,14 +38,8 @@ const MarkdownContent = ({ content, isMe }) => (
         <blockquote className={`border-l-2 pl-3 my-1 italic text-sm ${isMe ? 'border-purple-300 text-purple-100' : 'border-gray-300 text-gray-500'
           }`}>{children}</blockquote>
       ),
-      code: ({ inline, children }) =>
-        inline ? (
-          <code className="font-mono text-xs bg-gray-800 text-gray-100 px-1.5 py-0.5 rounded">{children}</code>
-        ) : (
-          <pre className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded-xl my-1 overflow-x-auto whitespace-pre-wrap">
-            <code>{children}</code>
-          </pre>
-        ),
+      pre: ({ children }) => <pre className="font-mono text-xs bg-slate-950 text-slate-100 p-3 rounded-xl my-2 overflow-x-auto">{children}</pre>,
+      code: ({ children }) => <code>{children}</code>,
       a: ({ href, children }) => (
         <a href={href} target="_blank" rel="noopener noreferrer"
           className={`underline underline-offset-2 ${isMe ? 'text-purple-200 hover:text-white' : 'text-purple-600 hover:text-purple-800'
@@ -58,6 +56,7 @@ const ActionBtn = ({ icon, label, onClick, danger = false }) => (
   <button
     onClick={onClick}
     title={label}
+    aria-label={label}
     className={`p-1.5 rounded-lg transition-all text-xs flex items-center gap-1 font-semibold ${danger
         ? 'text-red-500 hover:bg-red-50'
         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
@@ -67,17 +66,20 @@ const ActionBtn = ({ icon, label, onClick, danger = false }) => (
   </button>
 );
 
-function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
+function Dashboard({ user, onLogout, refreshUser, initialTab = 'home' }) {
   const { playSound, showNotification } = useTheme();
-  const [username, setUsername] = useState(user?.name || "Anonymous");
-  const [room, setRoom] = useState(localStorage.getItem('activeRoom') || "");
-  const [chatName, setChatName] = useState(localStorage.getItem('activeChatName') || "");
+  const username = user?.name || "Anonymous";
+  const [recentConversations, setRecentConversations] = useState(() => getRecentConversations(user.id));
+  const [savedConversation] = useState(() => getRecentConversations(user.id)[0]);
+  const [room, setRoom] = useState(savedConversation?.room || "");
+  const [chatName, setChatName] = useState(savedConversation?.name || "");
+  const isPrivateRoom = /^\d+-\d+$/.test(room);
   const getTabFromHash = () => {
     const hash = window.location.hash.replace(/^#\//, '');
-    return ['chats', 'community', 'settings', 'search', 'requests'].includes(hash) ? hash : null;
+    return ['home', 'chats', 'community', 'settings', 'search', 'requests'].includes(hash) ? hash : null;
   };
 
-  const [activeTab, setActiveTab] = useState(() => getTabFromHash() || initialTab);
+  const [activeTab, setActiveTab] = useState(() => getTabFromHash() || (savedConversation ? 'chats' : initialTab));
 
   useEffect(() => {
     if (window.location.hash !== `#/${activeTab}`) {
@@ -97,7 +99,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   }, [activeTab]);
 
   const [message, setMessage] = useState("");
-  const [showChat, setShowChat] = useState(false);
+  const [showChat, setShowChat] = useState(!!savedConversation);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
@@ -113,6 +115,15 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
 
   const [groups, setGroups] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [inboxSearch, setInboxSearch] = useState('');
+  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const typingTimeoutRef = React.useRef(null);
+  const followMessagesRef = React.useRef(true);
+  const messageInputRef = React.useRef(null);
+  const matchesInbox = name => name.toLowerCase().includes(inboxSearch.trim().toLowerCase());
 
   useEffect(() => {
     if (user) {
@@ -122,45 +133,46 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     }
   }, [user]);
 
-  const toggleDetailPane = () => setShowDetailPane(prev => !prev);
   const messagesEndRef = React.useRef(null);
 
 
   // replyingTo: the message object the user is replying to (null = no active reply)
   const [replyingTo, setReplyingTo] = useState(null);
   // editingId: id of the message currently being edited (null = none)
-  // TODO (backend): wire up socket/API event to persist edits
   const [editingId, setEditingId] = useState(null);
 
-  const handleReply = (msg) => setReplyingTo(msg);
+  const handleReply = (msg) => { setEditingId(null); setReplyingTo(msg); messageInputRef.current?.focus(); };
   const cancelReply = () => setReplyingTo(null);
 
-  const handleDeleteMessage = (msgId) => {
-    // TODO (backend): call DELETE /api/messages/:id and emit socket event
-    // socket.emit('delete_message', { room, messageId: msgId });
-    queryClient.setQueryData(['messages', room], (old) =>
-      old ? old.filter(m => m.id !== msgId && m.tempId !== msgId) : old
-    );
-    toast.success('Message removed');
+  const handleDeleteMessage = async () => {
+    if (!pendingDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/api/messages/${pendingDelete.id}`);
+      queryClient.setQueryData(['messages', pendingDelete.room], old => old?.filter(item => item.id !== pendingDelete.id));
+      setPendingDelete(null);
+      toast.success('Message deleted');
+    } catch { toast.error('Couldn’t delete the message. Please try again.'); }
+    finally { setIsDeleting(false); }
   };
 
   const handleEditMessage = (msg) => {
-    // TODO (backend): after edit, call PATCH /api/messages/:id
     setEditingId(msg.id);
+    setReplyingTo(null);
     setMessage(msg.content); // pre-fill input with current content
-    toast('Edit mode — update text and press Enter', { icon: '✏️' });
+    messageInputRef.current?.focus();
   };
 
   const queryClient = useQueryClient();
 
-  const { data: messageList = [], isLoading: isMessagesLoading } = useQuery({
+  const { data: messageList = [], isLoading: isMessagesLoading, isError: messagesError, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', room],
     queryFn: async () => {
-      const { data } = await api.get(`/api/messages?room=${room}`);
+      const { data } = await api.get('/api/messages', { params: { room } });
       return data;
     },
     enabled: !!room,
-    staleTime: Infinity,
+    staleTime: 30000,
   });
 
   const mutation = useMutation({
@@ -168,39 +180,49 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       return api.post('/api/messages', newMessage);
     },
     onMutate: async (newMessage) => {
-      await queryClient.cancelQueries({ queryKey: ['messages', room] });
-      const previousMessages = queryClient.getQueryData(['messages', room]);
-      queryClient.setQueryData(['messages', room], (old) => [...(old || []), newMessage]);
-      return { previousMessages };
+      await queryClient.cancelQueries({ queryKey: ['messages', newMessage.room] });
+      
+      queryClient.setQueryData(['messages', newMessage.room], (old) => [...(old || []).filter(item => item.tempId !== newMessage.tempId), { ...newMessage, status: 'sending' }]);
+      
     },
-    onError: (err, newMessage, context) => {
-      queryClient.setQueryData(['messages', room], (old) => {
+    onError: (err, newMessage) => {
+      queryClient.setQueryData(['messages', newMessage.room], (old) => {
         if (!old) return old;
         return old.map(m => (m.tempId === newMessage.tempId) ? { ...m, status: 'error' } : m);
       });
       console.error("Failed to send message", err);
+      toast.error('Message not sent. Tap Retry below the message.');
     },
     onSuccess: (response, variables) => {
       const serverMessage = response.data;
-      queryClient.setQueryData(['messages', room], (old) => {
+      queryClient.setQueryData(['messages', variables.room], (old) => {
         if (!old) return old;
         return old.map(m => (m.tempId === variables.tempId) ? { ...serverMessage, status: 'sent', tempId: variables.tempId } : m);
       });
     },
   });
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
-  }, [messageList, isTyping]);
+    if (followMessagesRef.current) messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [messageList, typingUsers.length, activeTab]);
+
+  useEffect(() => () => clearTimeout(typingTimeoutRef.current), []);
 
 
   const joinRoom = async (roomName, friendlyName = null) => {
     const r = roomName || room;
     if (username !== "" && r !== "") {
+      if (room) { socket.emit('stop_typing', room); socket.emit('leave_room', room); }
+      clearTimeout(typingTimeoutRef.current);
+      followMessagesRef.current = true;
+      setIsTyping(false);
+      setTypingUsers([]);
+      setMessage('');
+      setEditingId(null);
+      setReplyingTo(null);
+      setShowEmojiPicker(false);
+      setShowDecisionNode(false);
+      setShowAnalytics(false);
       socket.emit("join_room", r);
       if (!showChat) setShowChat(true);
       setRoom(r);
@@ -208,8 +230,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       const name = friendlyName || r;
       setChatName(name);
 
-      localStorage.setItem('activeRoom', r);
-      localStorage.setItem('activeChatName', name);
+      setRecentConversations(rememberConversation(user.id, r, name));
     }
   };
 
@@ -226,24 +247,26 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   };
 
   const sendMessage = async () => {
-    if (message !== "") {
-      const tempId = Date.now() + Math.random();
+    if (message.trim() && room && !editMutation.isPending) {
+      if (editingId) {
+        editMutation.mutate({ id: editingId, room, content: message.trim() });
+        return;
+      }
+      const tempId = crypto.randomUUID();
       const messageData = {
         room: room,
         author: username,
-        content: message,
+        content: replyingTo ? `> Reply to ${replyingTo.sender?.name || replyingTo.author || 'a message'}\n> ${(replyingTo.content || '').split('\n').join('\n> ')}\n\n${message.trim()}` : message.trim(),
         email: user?.email,
         senderId: user?.id,
-        image: user?.image || `https://ui-avatars.com/api/?name=${username}`,
-        time: new Date(Date.now()).getHours() + ":" + new Date(Date.now()).getMinutes(),
+        image: user?.image,
+        timestamp: new Date().toISOString(),
         isOptimistic: true,
         status: 'sending',
         tempId: tempId,
-        // Feature 2: include reply context so receiving end can render the quoted block
-        // TODO (backend): persist replyTo on the Message model and return it from /api/messages
-        replyTo: replyingTo ? { id: replyingTo.id, author: replyingTo.sender?.name || replyingTo.author, content: replyingTo.content } : undefined,
       };
 
+      followMessagesRef.current = true;
       mutation.mutate(messageData);
       setMessage("");
       setReplyingTo(null); // clear reply banner after send
@@ -258,13 +281,31 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       setIsTyping(true);
       socket.emit("typing", room);
     }
-    clearTimeout(window.typingTimeout);
-    window.typingTimeout = setTimeout(handleStopTyping, 2000);
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(handleStopTyping, 2000);
   };
 
   const handleStopTyping = () => {
     setIsTyping(false);
     socket.emit("stop_typing", room);
+  };
+
+  const editMutation = useMutation({
+    mutationFn: ({ id, content }) => api.patch(`/api/messages/${id}`, { content }),
+    onSuccess: ({ data }, variables) => {
+      queryClient.setQueryData(['messages', variables.room], old => old?.map(item => item.id === data.id ? data : item));
+      if (variables.room === room) { setEditingId(null); setMessage(''); handleStopTyping(); }
+      toast.success('Message updated');
+    },
+    onError: () => toast.error('Couldn’t save your edit. Your text is still here.'),
+  });
+
+  const openInbox = () => {
+    handleStopTyping();
+    if (room) socket.emit('leave_room', room);
+    clearTimeout(typingTimeoutRef.current);
+    setShowChat(false); setShowDetailPane(false); setShowDecisionNode(false); setShowAnalytics(false);
+    setRoom(''); setReplyingTo(null); setEditingId(null); setMessage(''); setActiveTab('chats');
   };
 
   useEffect(() => {
@@ -302,7 +343,8 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     };
 
     const handleFriendRequest = (data) => {
-      toast.info(`New friend request from ${data.senderName}!`);
+      toast(`New friend request from ${data.senderName}!`);
+      queryClient.invalidateQueries({ queryKey: ['pendingRequests', user.id] });
     };
 
     const handleMessageSent = (data) => {
@@ -330,6 +372,19 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       setPolls(prev => prev.map(p => p.id === poll.id ? poll : p));
     };
 
+    const handleConnect = () => {
+      setIsConnected(true);
+      socket.emit('user_connected', user);
+      if (room) { socket.emit('join_room', room); queryClient.invalidateQueries({ queryKey: ['messages', room] }); }
+    };
+    const handleDisconnect = () => setIsConnected(false);
+    const handleMessageUpdated = data => { if (data.room === room) queryClient.setQueryData(['messages', room], old => old?.map(item => item.id === data.id ? data : item)); };
+    const handleMessageDeleted = data => { if (data.room === room) queryClient.setQueryData(['messages', room], old => old?.filter(item => item.id !== data.id)); };
+    const connectedTimer = setTimeout(() => setIsConnected(socket.connected), 0);
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('message_updated', handleMessageUpdated);
+    socket.on('message_deleted', handleMessageDeleted);
     socket.on("receive_message", handleReceiveMessage);
     socket.on("display_typing", handleDisplayTyping);
     socket.on("hide_typing", handleHideTyping);
@@ -341,6 +396,11 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     socket.on("poll_updated", handlePollUpdated);
 
     return () => {
+      clearTimeout(connectedTimer);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('message_updated', handleMessageUpdated);
+      socket.off('message_deleted', handleMessageDeleted);
       socket.off("receive_message", handleReceiveMessage);
       socket.off("display_typing", handleDisplayTyping);
       socket.off("hide_typing", handleHideTyping);
@@ -351,19 +411,13 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       socket.off("poll_created", handlePollCreated);
       socket.off("poll_updated", handlePollUpdated);
     }
-  }, [socket, user, room, username, queryClient]);
+  }, [user, room, username, queryClient, playSound, showNotification]);
 
   useEffect(() => {
-    if (user) {
-      const persistedRoom = localStorage.getItem('activeRoom');
-      const persistedName = localStorage.getItem('activeChatName');
-      if (persistedRoom) {
-        joinRoom(persistedRoom, persistedName || persistedRoom);
-      } else {
-        joinRoom('global_forum', 'Public Square');
-      }
+    if (savedConversation) {
+      socket.emit('join_room', savedConversation.room);
     }
-  }, [user]);
+  }, [savedConversation]);
 
   useEffect(() => {
     if (room && user) {
@@ -393,34 +447,40 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
   }, []);
 
   return (
-    <div className="flex flex-col md:flex-row bg-[var(--color-surface)] text-[var(--color-on-surface)] font-body h-screen w-full overflow-hidden selection:bg-[var(--color-primary-container)] selection:text-[var(--color-on-primary-container)] pb-[72px] md:pb-0">
-      <Toaster position="top-center" />
+    <div className="app-shell flex flex-col md:flex-row bg-[var(--color-surface)] text-[var(--color-on-surface)] font-body w-full overflow-hidden">
+      <Toaster position="top-center" toastOptions={{ style: { borderRadius: '14px', background: 'var(--color-surface-container-lowest)', color: 'var(--color-on-surface)', border: '1px solid var(--color-outline-variant)' } }} />
+      <Sidebar user={user} onLogout={onLogout} onTabChange={setActiveTab} onCompose={openInbox} activeTab={activeTab} />
 
-      {/* Full-screen Forum — hide chat chrome */}
-      {activeTab === 'community' ? (
-        <div className="w-full h-full overflow-hidden">
-          <CommunityFeed user={user} onBack={() => setActiveTab('chats')} />
+      {/* Keep primary navigation in place while the page content changes. */}
+      {activeTab === 'home' ? (
+        <>
+          <Home
+            user={user}
+            recentConversations={recentConversations}
+            groups={groups}
+            onNavigate={setActiveTab}
+            onOpenConversation={({ room: nextRoom, name }) => {
+              joinRoom(nextRoom, name);
+              setActiveTab('chats');
+            }}
+            onStartPrivateChat={startPrivateChat}
+          />
+        </>
+      ) : activeTab === 'community' ? (
+        <div className="flex-1 min-w-0 h-full overflow-hidden">
+          <CommunityFeed user={user} />
         </div>
       ) : activeTab === 'settings' ? (
-        <div className="w-full h-full overflow-hidden flex">
-          <Sidebar onLogout={onLogout} onTabChange={setActiveTab} activeTab={activeTab} />
-          <Settings user={user} onUserUpdate={(updatedUser) => { refreshUser(updatedUser); }} />
+        <div className="flex-1 min-w-0 h-full overflow-hidden flex">
+          <Settings user={user} onLogout={onLogout} onUserUpdate={(updatedUser) => { refreshUser(updatedUser); }} />
         </div>
       ) : (
         <>
-          {/* 3-Pane Layout Navigation Sidebar */}
-          <Sidebar
-            onLogout={onLogout}
-            onTabChange={setActiveTab}
-            activeTab={activeTab}
-            className="zen-hide"
-          />
-
           {/* Main Content Area (Middle Pane + Right Pane) */}
-          <main className="flex-grow flex flex-col md:flex-row h-full">
+          <main className="flex-grow min-w-0 flex flex-col md:flex-row h-full">
 
             {/* Middle Pane: Inbox List — hidden when a chat is active */}
-            <section className={`w-full md:w-[420px] bg-[var(--color-surface)] flex flex-col z-10 border-r ghost-border zen-hide ${showChat && room && activeTab === 'chats' ? 'hidden md:flex' : 'flex'}`}>
+            <section className={`w-full md:w-[420px] bg-[var(--color-surface)] flex flex-col z-10 border-r ghost-border ${showChat && room && activeTab === 'chats' ? 'hidden' : 'flex'}`}>
               <div className="p-8 space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="font-display text-3xl font-bold tracking-tight text-[var(--color-on-surface)]">
@@ -431,7 +491,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                       <button onClick={() => setShowCreateGroup(true)} className="px-3 h-10 rounded-xl bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-bold text-sm flex items-center gap-1 hover:bg-[var(--color-primary)]/20 transition-colors">
                         <span className="material-symbols-outlined text-[18px]">group_add</span> Create
                       </button>
-                      <button className="w-10 h-10 rounded-full bg-[var(--color-surface-container-low)] flex items-center justify-center hover:bg-[var(--color-surface-container-high)] transition-colors">
+                      <button onClick={() => setActiveTab('search')} aria-label="Find a friend to message" className="w-10 h-10 rounded-full bg-[var(--color-surface-container-low)] flex items-center justify-center hover:bg-[var(--color-surface-container-high)] transition-colors">
                         <span className="material-symbols-outlined text-[var(--color-on-surface-variant)]">edit_square</span>
                       </button>
                     </div>
@@ -443,7 +503,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                     <label className="block font-body text-xs font-semibold text-[var(--color-on-surface-variant)] mb-1 ml-1">Jump to...</label>
                     <div className="relative flex items-center group">
                       <span className="material-symbols-outlined absolute left-4 text-[var(--color-on-surface-variant)] group-focus-within:text-[var(--color-primary)] transition-colors">search</span>
-                      <input className="w-full h-12 pl-12 pr-4 bg-[var(--color-surface-variant)] border-none outline-none rounded-xl focus:ring-1 focus:ring-[var(--color-primary)] focus:bg-[var(--color-surface-container-lowest)] transition-all placeholder:text-[var(--color-on-surface-variant)]/50" placeholder="Search anywhere..." type="text" />
+                      <input value={inboxSearch} onChange={event => setInboxSearch(event.target.value)} aria-label="Filter conversations" className="w-full h-12 pl-12 pr-4 bg-[var(--color-surface-variant)] border-none outline-none rounded-xl focus:ring-1 focus:ring-[var(--color-primary)] focus:bg-[var(--color-surface-container-lowest)] transition-all placeholder:text-[var(--color-on-surface-variant)]/50" placeholder="Find a friend or group…" type="search" />
                     </div>
                   </div>
                 )}
@@ -452,10 +512,11 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
               <div className="flex-grow overflow-y-auto px-4 space-y-2 pb-8 custom-scrollbar">
                 {activeTab === 'chats' && (
                   <>
+                    {inboxSearch.trim() && !matchesInbox('Public Square') && !groups.some(group => matchesInbox(group.name)) && !(user.friends || []).some(friend => matchesInbox(friend.name)) && <div role="status" className="text-center p-5 text-sm text-[var(--color-on-surface-variant)]"><p>No conversations match that name.</p><button onClick={() => setInboxSearch('')} className="text-[var(--color-primary)] font-bold mt-2">Clear search</button></div>}
                     <h3 className="text-xs font-bold text-[var(--color-on-surface-variant)] mb-3 mt-4 uppercase tracking-widest px-2 font-display">Public Rooms</h3>
-                    <div
+                    {matchesInbox('Public Square') && <button
                       onClick={() => joinRoom('global_forum', 'Public Square')}
-                      className={`p-4 rounded-2xl transition-colors flex items-center gap-4 cursor-pointer group ${room === 'global_forum' ? 'bg-[var(--color-surface-container-lowest)] shadow-ambient' : 'hover:bg-[var(--color-surface-container-low)]'}`}
+                      className={`w-full text-left p-4 rounded-2xl transition-colors flex items-center gap-4 cursor-pointer group ${room === 'global_forum' ? 'bg-[var(--color-surface-container-lowest)] shadow-ambient' : 'hover:bg-[var(--color-surface-container-low)]'}`}
                     >
                       <div className="relative shrink-0">
                         <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${room === 'global_forum' ? 'cta-gradient text-[var(--color-on-primary)]' : 'bg-[var(--color-surface-container-high)] text-[var(--color-secondary-dim)]'}`}>
@@ -469,12 +530,12 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                         </div>
                         <p className="text-sm text-[var(--color-on-surface-variant)] truncate">Join the public discussion!</p>
                       </div>
-                    </div>
+                    </button>}
 
                     {groups.length > 0 && (
                       <>
                         <h3 className="text-xs font-bold text-[var(--color-on-surface-variant)] mb-3 mt-6 uppercase tracking-widest px-2 font-display">Your Groups</h3>
-                        {groups.map(group => (
+                        {groups.filter(group => matchesInbox(group.name)).map(group => (
                           <div
                             key={group.id}
                             onClick={() => joinRoom(`group-${group.id}`, group.name)}
@@ -501,9 +562,9 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                         <button onClick={() => setActiveTab('search')} className="text-xs text-[var(--color-primary)] font-bold mt-1 underline">Find people</button>
                       </div>
                     ) : (
-                      user.friends.map((friend) => {
+                      user.friends.filter(friend => matchesInbox(friend.name)).map((friend) => {
                         const isOnline = activeUsers.some(u => u.id === friend.id);
-                        const isActiveChat = room.includes(friend.id);
+                        const isActiveChat = room === [user.id, friend.id].sort((a, b) => a - b).join('-');
                         return (
                           <div
                             key={friend.id}
@@ -543,7 +604,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
             <section className={`flex-grow bg-[var(--color-surface)] flex-col md:flex-row relative overflow-hidden ${activeTab === 'community' || (activeTab === 'chats' && showChat && room) ? 'flex' : 'hidden md:flex'}`}>
               <AnimatePresence mode="wait">
                 {activeTab === 'community' ? (
-                  <motion.div
+                  <Motion.div
                     key="community-feed"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -551,19 +612,19 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                     className="flex-1 h-full relative w-full"
                   >
                     <CommunityFeed user={user} />
-                  </motion.div>
-                ) : activeTab !== 'chats' ? (
-                  <motion.div
+                  </Motion.div>
+                ) : activeTab !== 'chats' || !room || !showChat ? (
+                  <Motion.div
                     key="empty-state"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="flex-1 h-full relative w-full"
                   >
-                    <EmptyState type={activeTab} />
-                  </motion.div>
+                    <EmptyState type={activeTab === 'chats' ? 'noChat' : activeTab} />
+                  </Motion.div>
                 ) : (
-                  <motion.div
+                  <Motion.div
                     key="chat-interface"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -576,34 +637,34 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                       <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-[var(--color-primary)]/5 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
 
                       {/* Top App Bar from Active Conversation */}
-                      <header className="h-20 bg-[var(--color-surface)]/80 custom-glass sticky top-0 z-50 flex justify-between items-center w-full px-8 shadow-[0_8px_24px_rgba(39,46,66,0.06)] border-b ghost-border">
+                      <header className="chat-header bg-[var(--color-surface-container-lowest)]/90 custom-glass sticky top-0 z-40 flex justify-between items-center w-full border-b ghost-border">
                         <div className="flex items-center gap-4">
                           <button 
-                            onClick={() => { setShowChat(false); setShowDetailPane(false); setRoom(""); }} 
+                            onClick={openInbox}
                             className="p-2 -ml-3 rounded-xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-colors"
                             title="Back to Inbox"
                           >
                             <span className="material-symbols-outlined text-[20px]">arrow_back</span>
                           </button>
                           <div className="relative">
-                            {room.includes('-') && user?.friends?.find(f => chatName === f.name)?.image ? (
+                            {isPrivateRoom && user?.friends?.find(f => chatName === f.name)?.image ? (
                               <img src={user.friends.find(f => chatName === f.name).image} className="w-11 h-11 rounded-2xl object-cover ring-2 ring-[var(--color-surface-container-low)]" />
                             ) : (
                               <div className="w-11 h-11 rounded-2xl bg-[var(--color-surface-container-high)] flex items-center justify-center font-bold text-[var(--color-on-surface)] ring-2 ring-[var(--color-surface-container-low)]">
                                 {chatName.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            {room.includes('-') && (
+                            {isPrivateRoom && (
                               <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[var(--color-surface)] ${activeUsers.some(u => u.name === chatName) ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                             )}
                           </div>
                           <div>
                             <h2 className="font-display text-lg font-black text-[var(--color-on-background)] tracking-tight">
-                              {room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}
+                              {isPrivateRoom ? (chatName || 'Private Chat') : `#${chatName || room}`}
                             </h2>
                             <div className="flex items-center gap-2">
-                              <p className="text-xs font-body text-[var(--color-on-surface-variant)]">{room.includes('-') ? 'User Profile' : 'Public Channel'}</p>
-                              {typingUsers.length > 0 && room.includes('-') && (
+                              <p className="text-xs font-body text-[var(--color-on-surface-variant)]">{isPrivateRoom ? 'User Profile' : 'Public Channel'}</p>
+                              {typingUsers.length > 0 && isPrivateRoom && (
                                 <>
                                   <span className="w-1 h-1 bg-[var(--color-outline-variant)] rounded-full"></span>
                                   <p className="text-[10px] uppercase tracking-widest text-[var(--color-secondary)] font-bold">Typing...</p>
@@ -653,7 +714,9 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                       </header>
 
                       {/* Message Stream */}
-                      <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-10 scroll-smooth custom-scrollbar relative z-10">
+                      {!isConnected && <p role="status" className="status-banner">Reconnecting… Your messages will sync when you’re back online.</p>}
+                      <div onScroll={event => { const node = event.currentTarget; followMessagesRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120; }} className="message-stream flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar relative z-10">
+                        {messagesError && <div role="alert" className="text-center p-6"><p className="text-sm mb-3">Couldn’t load this conversation.</p><button onClick={() => refetchMessages()} className="text-sm text-[var(--color-primary)] font-bold">Try again</button></div>}
 
                         {/* ── Loading skeleton ── */}
                         {isMessagesLoading && (
@@ -695,14 +758,14 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
 
                         {!isMessagesLoading && (<AnimatePresence>
                           {messageList.map((messageContent, index) => {
-                            const isMe = (messageContent.sender?.name === username) || (messageContent.author === username);
+                            const isMe = (messageContent.senderId === user.id) || (messageContent.sender?.id === user.id);
                             const currentSender = messageContent.sender?.name || messageContent.author;
                             // Feature 3: check if the sender is currently online
                             const senderIsOnline = activeUsers.some(u => u.name === currentSender);
 
                             return (
                               // Feature 1: group class enables hover-based action menu visibility
-                              <motion.div
+                              <Motion.div
                                 key={messageContent.id || messageContent.tempId || index}
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -730,7 +793,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
 
                                 {/* ── Message body ── */}
                                 <div className={`space-y-1.5 ${isMe ? 'flex flex-col items-end' : ''}`}>
-                                  {!isMe && !room.includes('-') && <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-1 font-bold">{currentSender}</span>}
+                                  {!isMe && !isPrivateRoom && <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-1 font-bold">{currentSender}</span>}
 
                                   {/* Feature 2: quoted reply preview above the bubble */}
                                   {messageContent.replyTo && (
@@ -753,29 +816,30 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
 
                                     {/* Feature 1: Action menu — appears on hover, left of bubble for sender, right for receiver */}
                                     {isMe && (
-                                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                                      <div className="message-actions flex flex-col items-center gap-0.5 shrink-0">
                                         <ActionBtn icon="reply" label="Reply" onClick={() => handleReply(messageContent)} />
-                                        <ActionBtn icon="edit" label="Edit" onClick={() => handleEditMessage(messageContent)} />
-                                        <ActionBtn icon="delete" label="Delete" onClick={() => handleDeleteMessage(messageContent.id || messageContent.tempId)} danger />
+                                        {messageContent.id && <ActionBtn icon="edit" label="Edit" onClick={() => handleEditMessage(messageContent)} />}
+                                        {messageContent.id && <ActionBtn icon="delete" label="Delete" onClick={() => setPendingDelete(messageContent)} danger />}
                                       </div>
                                     )}
 
                                     <div className={`${isMe
-                                        ? 'bg-purple-600 text-white border-0 asymmetric-outgoing'
-                                        : 'bg-gray-50 text-gray-900 shadow-sm border border-gray-200 asymmetric-incoming'
-                                      } px-5 py-3.5 rounded-2xl max-w-sm`}>
+                                        ? 'bg-[var(--action-bg)] text-white border-0 asymmetric-outgoing'
+                                        : 'bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] shadow-sm border border-[var(--color-outline-variant)]/50 asymmetric-incoming'
+                                      } message-bubble px-5 py-3.5 rounded-2xl max-w-sm`}>
                                       {/* Feature 4: Markdown rendering */}
                                       <MarkdownContent content={messageContent.content} isMe={isMe} />
                                     </div>
 
                                     {/* Action menu for receiver messages (right side) */}
                                     {!isMe && (
-                                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                                      <div className="message-actions flex items-center gap-0.5 shrink-0">
                                         <ActionBtn icon="reply" label="Reply" onClick={() => handleReply(messageContent)} />
                                       </div>
                                     )}
                                   </div>
 
+                                  {messageContent.status === 'error' && <button className="text-xs font-bold text-[var(--color-error)]" onClick={() => mutation.mutate(messageContent)}>Not sent - Retry</button>}
                                   {/* Timestamp + delivery ticks */}
                                   <div className={`flex items-center gap-1.5 ${isMe ? 'mr-0 justify-end' : 'ml-0'}`}>
                                     <span className="text-[10px] text-[var(--color-outline)] px-1">
@@ -801,14 +865,14 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                                     )}
                                   </div>
                                 </div>
-                              </motion.div>
+                              </Motion.div>
                             )
                           })}
                         </AnimatePresence>)}
 
                         <AnimatePresence>
-                          {typingUsers.length > 0 && !room.includes('-') && ( /* Show in-feed typing only for group chats */
-                            <motion.div
+                          {typingUsers.length > 0 && !isPrivateRoom && ( /* Show in-feed typing only for group chats */
+                            <Motion.div
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0 }}
@@ -820,94 +884,45 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                                   <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-2">Someone is typing...</span>
                                 </div>
                               </div>
-                            </motion.div>
-                          )}
-                          {/* Self typing indicator — visible to the sender while composing */}
-                          {isTyping && (
-                            <motion.div
-                              id="typing-indicator"
-                              key="self-typing"
-                              initial={{ opacity: 0, y: 6 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0 }}
-                              className="flex gap-4 max-w-2xl ml-auto flex-row-reverse"
-                            >
-                              <div className="shrink-0 flex items-end">
-                                <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-fixed)] mt-auto flex items-center justify-center text-[10px] font-black text-[var(--color-on-primary-fixed-variant)]">ME</div>
-                              </div>
-                              <div className="flex flex-col items-end space-y-1">
-                                <div className="bg-gradient-to-br from-[var(--color-primary)]/70 to-[var(--color-primary-dim)]/70 px-5 py-3 rounded-2xl asymmetric-outgoing flex items-center gap-2 shadow-sm">
-                                  <span className="flex gap-1 items-center">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '0ms' }} />
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '150ms' }} />
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '300ms' }} />
-                                  </span>
-                                  <span className="text-[10px] text-[var(--color-on-primary)]/80 font-semibold">You are typing...</span>
-                                </div>
-                              </div>
-                            </motion.div>
+                            </Motion.div>
                           )}
                         </AnimatePresence>
                         <div ref={messagesEndRef} className="h-4" />
                       </div>
 
                       {/* Message Input Area (Floating Footer) */}
-                      <footer className="shrink-0 bg-[var(--color-surface-container-low)]/50 custom-glass border-t border-[var(--color-outline-variant)]/10 z-20">
+                      <footer className="chat-composer shrink-0 z-20">
+                        {editingId && <div className="status-banner flex justify-between gap-3"><span>Editing your message</span><button onClick={() => { setEditingId(null); setMessage(''); }} className="font-bold">Cancel edit</button></div>}
 
                         {/* Feature 2: Reply banner — visible when replyingTo is set */}
                         <AnimatePresence>
                           {replyingTo && (
-                            <motion.div
+                            <Motion.div
                               initial={{ opacity: 0, y: 6 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: 6 }}
-                              className="mx-6 md:mx-8 mt-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-purple-50 border border-purple-200"
+                              className="mx-6 md:mx-8 mt-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-[var(--color-primary-fixed)] border border-[var(--color-primary)]/20"
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="material-symbols-outlined text-purple-500 text-[16px] shrink-0">reply</span>
-                                <span className="text-xs font-bold text-purple-700 shrink-0">Replying to {replyingTo.sender?.name || replyingTo.author}</span>
-                                <span className="text-xs text-purple-500 truncate">{replyingTo.content}</span>
+                                <span className="text-xs font-bold text-[var(--color-primary)] shrink-0">Replying to {replyingTo.sender?.name || replyingTo.author}</span>
+                                <span className="text-xs text-[var(--color-primary)] truncate">{replyingTo.content}</span>
                               </div>
                               <button onClick={cancelReply} className="shrink-0 text-purple-400 hover:text-purple-700 transition-colors">
                                 <span className="material-symbols-outlined text-[18px]">close</span>
                               </button>
-                            </motion.div>
+                            </Motion.div>
                           )}
                         </AnimatePresence>
 
-                        <div className="p-4 md:p-6">
-                          <div className="max-w-5xl mx-auto flex items-center gap-4">
-                            <div className="flex items-center gap-1">
-                              <button className="p-3 rounded-2xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-all">
-                                <span className="material-symbols-outlined">add_circle</span>
-                              </button>
-                              <button className="p-3 rounded-2xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-all hidden sm:block">
-                                <span className="material-symbols-outlined">image</span>
-                              </button>
-                            </div>
-                            <div className="flex-1 relative">
-                              <input
-                                id="message-input"
-                                className="w-full h-12 pl-6 pr-14 rounded-2xl bg-white border border-gray-200 hover:border-purple-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all font-body text-[var(--color-on-surface)] placeholder:text-[var(--color-outline-variant)]"
-                                placeholder="Type a thoughtful response..."
-                                type="text"
-                                value={message}
-                                onChange={handleTyping}
-                                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                              />
-                              <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-[var(--color-on-surface-variant)] hover:text-[var(--color-primary)] transition-colors hidden sm:block">
-                                <span className="material-symbols-outlined">sentiment_satisfied</span>
-                              </button>
-                            </div>
-                            <button
-                              id="send-message-btn"
-                              onClick={sendMessage}
-                              disabled={!message.trim()}
-                              className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] flex items-center justify-center shadow-[0_12px_24px_rgba(74,64,224,0.25)] hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
-                            >
-                              <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-                            </button>
+                        <div className="p-3 sm:p-5">
+                          <div className="max-w-5xl mx-auto flex items-end gap-2 sm:gap-3 relative">
+                            <button onClick={() => setShowEmojiPicker(value => !value)} aria-label="Add an emoji" aria-expanded={showEmojiPicker} className="icon-button mb-1"><span aria-hidden="true" className="material-symbols-outlined">sentiment_satisfied</span></button>
+                            {showEmojiPicker && <div role="group" aria-label="Choose an emoji" className="absolute bottom-full left-0 mb-3 rounded-2xl p-3 bg-[var(--color-surface-container-lowest)] shadow-xl border border-[var(--color-outline-variant)] grid grid-cols-6 gap-1 z-30">{["😊","😂","❤️","🎉","🔥","🙌","✨","👋","💜","🤔","👍","🚀"].map(emoji => <button key={emoji} aria-label={emoji} onClick={() => { setMessage(value => value + emoji); setShowEmojiPicker(false); messageInputRef.current?.focus(); }} className="w-10 h-10 text-xl rounded-xl hover:bg-[var(--color-surface-container-low)]">{emoji}</button>)}</div>}
+                            <textarea ref={messageInputRef} id="message-input" aria-label={editingId ? 'Edit your message' : 'Write a message'} className="text-field resize-none min-w-0 flex-1 min-h-12 max-h-32" rows={2} placeholder={replyingTo ? 'Write your reply...' : 'Say something nice...'} value={message} onChange={handleTyping} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } if (event.key === 'Escape') { setShowEmojiPicker(false); setReplyingTo(null); setEditingId(null); } }} />
+                            <button id="send-message-btn" onClick={sendMessage} disabled={!message.trim() || editMutation.isPending} aria-label={editingId ? 'Save message' : 'Send message'} className="primary-button icon-only shrink-0 mb-1"><span aria-hidden="true" className="material-symbols-outlined">{editingId ? 'check' : 'arrow_upward'}</span></button>
                           </div>
+                          <p className="hidden sm:block text-[10px] text-[var(--color-on-surface-variant)] text-center mt-2">Enter to send / Shift + Enter for a new line / A little kindness goes a long way</p>
                           <div className="max-w-5xl mx-auto mt-3 px-1 flex items-center gap-2">
                             <div className="flex -space-x-2">
                               {user?.image ? (
@@ -917,27 +932,28 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                               )}
                               <div className="w-5 h-5 rounded-full ring-2 ring-[var(--color-surface)] bg-[var(--color-primary-fixed)] flex items-center justify-center text-xs font-black text-[var(--color-on-primary-fixed-variant)]"></div>
                             </div>
-                            <p className="text-[10px] font-body text-[var(--color-on-surface-variant)]">Active in <span className="font-bold">{room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}</span></p>
+                            <p className="text-[10px] font-body text-[var(--color-on-surface-variant)]">Active in <span className="font-bold">{isPrivateRoom ? (chatName || 'Private Chat') : `#${chatName || room}`}</span></p>
                           </div>
                         </div>
                       </footer>
                     </div>
                     {/* Right Detail Pane — slide in from right on ⋮ click */}
                     <AnimatePresence>
-                      {showDetailPane && room.includes('-') && (
-                        <motion.aside
+                      {showDetailPane && isPrivateRoom && (
+                        <Motion.aside
                           key="detail-pane"
                           initial={{ x: '100%', opacity: 0 }}
                           animate={{ x: 0, opacity: 1 }}
                           exit={{ x: '100%', opacity: 0 }}
                           transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-                          className="flex flex-col w-80 bg-[var(--color-surface-container-low)] border-l ghost-border p-8 space-y-8 z-30 shrink-0 overflow-y-auto custom-scrollbar"
+                          className="room-panel flex flex-col w-80 bg-[var(--color-surface-container-low)] border-l ghost-border p-8 space-y-8 z-30 shrink-0 overflow-y-auto custom-scrollbar"
                         >
                           {(() => {
                             const friend = user?.friends?.find(f => f.name === chatName);
                             const isOnline = activeUsers.some(u => u.name === chatName);
                             return (
                               <>
+                                <button onClick={() => setShowDetailPane(false)} aria-label="Close details" className="icon-button self-end"><span aria-hidden="true" className="material-symbols-outlined">close</span></button>
                                 <div className="text-center space-y-4">
                                   <div className="relative inline-block">
                                     {friend?.image ? (
@@ -989,34 +1005,34 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                               </>
                             )
                           })()}
-                        </motion.aside>
+                        </Motion.aside>
                       )}
                     </AnimatePresence>
-                  </motion.div>
+                  </Motion.div>
                 )}
               </AnimatePresence>
               
               {/* Collaborative Decision Node Pane */}
               <AnimatePresence>
                 {showDecisionNode && room && (
-                  <DecisionNodeEditor 
+                  <Suspense fallback={<div role="status" className="p-6 text-sm">Opening your shared notes…</div>}><DecisionNodeEditor
                     room={room} 
                     user={user} 
                     onClose={() => setShowDecisionNode(false)} 
-                  />
+                  /></Suspense>
                 )}
               </AnimatePresence>
 
               {/* Room Analytics Pane */}
               <AnimatePresence>
                 {showAnalytics && room && (
-                  <motion.aside
+                  <Motion.aside
                     key="analytics-pane"
                     initial={{ x: '100%', opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: '100%', opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    className="w-80 shrink-0 border-l border-[var(--color-outline-variant)]/30 bg-[var(--color-surface)] flex flex-col h-full z-40 overflow-hidden"
+                    className="room-panel w-80 shrink-0 border-l border-[var(--color-outline-variant)]/30 bg-[var(--color-surface)] flex flex-col h-full z-40 overflow-hidden"
                   >
                     <div className="px-5 py-4 border-b border-[var(--color-outline-variant)]/20 flex items-center justify-between bg-gradient-to-r from-purple-500/10 to-violet-500/10 shrink-0">
                       <div className="flex items-center gap-2.5">
@@ -1033,9 +1049,9 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                       </button>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
-                      <RoomAnalytics room={room} />
+                      <Suspense fallback={<div role="status" className="p-6 text-sm">Gathering room activity…</div>}><RoomAnalytics room={room} /></Suspense>
                     </div>
-                  </motion.aside>
+                  </Motion.aside>
                 )}
               </AnimatePresence>
 
@@ -1043,15 +1059,6 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
           </main>
 
           {/* ── Global Modals ────────────────────────────────────────────── */}
-          <AnimatePresence>
-            {showSearch && (
-              <SearchModal
-                currentRoom={room}
-                onClose={() => setShowSearch(false)}
-              />
-            )}
-          </AnimatePresence>
-
           <AnimatePresence>
             {showCreatePoll && (
               <CreatePollModal
@@ -1074,6 +1081,8 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
         </>
       )}
 
+      {pendingDelete && <Dialog title="Delete this message?" onClose={() => { if (!isDeleting) setPendingDelete(null); }}><p className="text-sm text-[var(--color-on-surface-variant)] mb-5">This removes your message for everyone in the conversation.</p><div className="flex justify-end gap-3"><button onClick={() => setPendingDelete(null)} disabled={isDeleting} className="px-4 py-2 text-sm font-bold">Keep it</button><button onClick={handleDeleteMessage} disabled={isDeleting} className="primary-button danger-button">{isDeleting ? 'Deleting...' : 'Delete message'}</button></div></Dialog>}
+      <AnimatePresence>{showSearch && <SearchModal currentRoom={room} onClose={() => setShowSearch(false)} />}</AnimatePresence>
       {/* Mobile Navigation Bar */}
       <MobileNav activeTab={activeTab} onTabChange={setActiveTab} />
     </div>

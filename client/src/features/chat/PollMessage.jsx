@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 import api from '../../services/api';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -82,7 +82,7 @@ const PollMessage = ({ poll: initialPoll, currentUserId }) => {
                                 `}
                             >
                                 {/* Progress fill */}
-                                <motion.div
+                                <Motion.div
                                     className={`absolute inset-0 rounded-xl ${isMyVote ? 'bg-purple-500/20' : 'bg-[var(--color-surface-container-high)]'}`}
                                     initial={{ width: 0 }}
                                     animate={{ width: hasVoted || isClosed ? `${pct}%` : '0%' }}
